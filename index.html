@@ -212,7 +212,6 @@
     const main = document.getElementById('main');
     const showLoginBtn = document.getElementById('showLogin');
     const showRegisterBtn = document.getElementById('showRegister');
-    const demoResetBtn = document.getElementById('demoReset');
     const themeToggle = document.getElementById('themeToggle');
     const themeSwitch = document.getElementById('themeSwitch');
     const themeLabel = document.getElementById('themeLabel');
@@ -253,8 +252,6 @@
     // UI wiring
     showLoginBtn.onclick = () => renderAuth('login');
     showRegisterBtn.onclick = () => renderAuth('register');
-   if (demoResetBtn) {
-  demoResetBtn.onclick = async () => { if(confirm('Zresetować demo (przywróci konto admina)?')){ localStorage.removeItem(ACC_KEY); localStorage.removeItem(TASK_KEY); localStorage.removeItem(LOG_KEY); await initDemo(); alert('Zresetowano.'); renderAuth('login'); } }
 
     // Role cards helper (registration) - OPIEKUN cannot be self-selected
     function roleCardHTML(selectedRole){
@@ -488,7 +485,7 @@
 
     // suspend/activate helpers
     window.suspendUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'suspended'; saveAccounts(accs); pushLog('suspend', getSession(), id, 'Zawieszono konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zawieszone', msg:`Twoje konto ${id} zostało zawieszone.`}); renderDashboard(); }
-    window.activateUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('activate', getSession(), id, 'Aktywowano konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto aktywne', msg:`Twoje konto ${id} zostało aktywowane przez administratora.`}); renderDashboard(); }
+    window.activateUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('activate', getSession(), id, 'Aktywовано konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto aktywne', msg:`Twoje konto ${id} zostało aktywowane przez administratora.`}); renderDashboard(); }
 
     function approveAccount(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('approve', getSession(), id, 'Zatwierdzono rejestrację'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zatwierdzone', msg:`Twoje konto ${id} zostało zatwierdzone.`}); renderDashboard(); }
 

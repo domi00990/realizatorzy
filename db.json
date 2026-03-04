@@ -1,0 +1,21 @@
+{
+  "accounts": [
+    {
+      "discordId": "1338922988753518723",
+      "passwordHash": "abcdef123456",
+      "role": "Administrator",
+      "status": "active",
+      "partnerships": 0,
+      "warnings": 0,
+      "rate": 0,
+      "inbox": []
+    }
+  ],
+  "tasks": [],
+  "logs": [],
+  "settings": {
+    "theme": "auto",
+    "useServer": false,
+    "serverURL": "http://localhost:3001"
+  }
+}

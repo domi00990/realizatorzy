@@ -1,82 +1,98 @@
 // server.js
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
 const ACC_FILE = path.join(__dirname, 'accounts.json');
 
-// --- Storage helpers ---
+// --- Helper: load/save accounts ---
 function loadAccounts() {
-  if (!fs.existsSync(ACC_FILE)) return [];
-  return JSON.parse(fs.readFileSync(ACC_FILE, 'utf8'));
+  try {
+    const data = fs.readFileSync(ACC_FILE, 'utf-8');
+    return JSON.parse(data);
+  } catch (e) {
+    return [];
+  }
 }
+
 function saveAccounts(accs) {
   fs.writeFileSync(ACC_FILE, JSON.stringify(accs, null, 2));
 }
 
-// --- SSE (Server-Sent Events) ---
+// --- SSE clients ---
 let clients = [];
+
 function sendSSE(data) {
-  clients.forEach(res => res.write(`data: ${JSON.stringify(data)}\n\n`));
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  clients.forEach(res => res.write(payload));
 }
 
-// --- Middleware ---
-app.use(cors());
-app.use(bodyParser.json());
+// --- Routes ---
 
-// --- SSE endpoint ---
-app.get('/api/events', (req, res) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  });
-  res.write('\n');
-  clients.push(res);
-
-  req.on('close', () => {
-    clients = clients.filter(c => c !== res);
-  });
-});
-
-// --- Get all accounts ---
+// GET all accounts
 app.get('/api/accounts', (req, res) => {
   const accs = loadAccounts();
   res.json(accs);
 });
 
-// --- Create new account ---
+// POST new account
 app.post('/api/accounts', (req, res) => {
   const accs = loadAccounts();
-  const { discordId } = req.body;
-  if (accs.find(a => a.discordId === discordId)) return res.status(409).json({ error: 'ID exists' });
-
-  accs.push(req.body);
+  const newAcc = req.body;
+  if (!newAcc.discordId || !newAcc.passwordHash) {
+    return res.status(400).json({ error: 'discordId i passwordHash wymagane' });
+  }
+  if (accs.find(a => a.discordId === newAcc.discordId)) {
+    return res.status(409).json({ error: 'Konto już istnieje' });
+  }
+  accs.push(newAcc);
   saveAccounts(accs);
 
-  sendSSE({ type: 'account-updated', payload: { id: discordId } });
-  res.status(201).json({ ok: true });
+  sendSSE({ type: 'account-updated', payload: { id: newAcc.discordId } });
+  res.status(201).json(newAcc);
 });
 
-// --- Update account by ID ---
+// PUT update account
 app.put('/api/accounts/:id', (req, res) => {
   const id = req.params.id;
-  let accs = loadAccounts();
-  const idx = accs.findIndex(a => a.discordId === id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const updates = req.body;
+  const accs = loadAccounts();
+  const acc = accs.find(a => a.discordId === id);
+  if (!acc) return res.status(404).json({ error: 'Nie znaleziono konta' });
 
-  accs[idx] = { ...accs[idx], ...req.body };
+  Object.assign(acc, updates);
   saveAccounts(accs);
 
   sendSSE({ type: 'account-updated', payload: { id } });
-  res.json({ ok: true });
+  res.json(acc);
 });
 
-// --- Start server ---
+// SSE endpoint
+app.get('/events', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+  res.flushHeaders();
+
+  // send welcome
+  res.write(`data: ${JSON.stringify({ type:'welcome', payload:'connected'})}\n\n`);
+
+  clients.push(res);
+  req.on('close', () => {
+    clients = clients.filter(c => c !== res);
+  });
+});
+
+// start server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server działa na porcie ${PORT}`);
 });

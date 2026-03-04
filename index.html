@@ -253,7 +253,8 @@
     // UI wiring
     showLoginBtn.onclick = () => renderAuth('login');
     showRegisterBtn.onclick = () => renderAuth('register');
-    demoResetBtn.onclick = async () => { if(confirm('Zresetować demo (przywróci konto admina)?')){ localStorage.removeItem(ACC_KEY); localStorage.removeItem(TASK_KEY); localStorage.removeItem(LOG_KEY); await initDemo(); alert('Zresetowano.'); renderAuth('login'); } }
+   if (demoResetBtn) {
+  demoResetBtn.onclick = async () => { if(confirm('Zresetować demo (przywróci konto admina)?')){ localStorage.removeItem(ACC_KEY); localStorage.removeItem(TASK_KEY); localStorage.removeItem(LOG_KEY); await initDemo(); alert('Zresetowano.'); renderAuth('login'); } }
 
     // Role cards helper (registration) - OPIEKUN cannot be self-selected
     function roleCardHTML(selectedRole){

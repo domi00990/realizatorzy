@@ -12,7 +12,7 @@ app.use(express.json());
 
 const ACC_FILE = path.join(__dirname, 'accounts.json');
 
-// --- Helper: load/save accounts ---
+// --- Load/save accounts ---
 function loadAccounts() {
   try {
     const data = fs.readFileSync(ACC_FILE, 'utf-8');
@@ -24,6 +24,35 @@ function loadAccounts() {
 
 function saveAccounts(accs) {
   fs.writeFileSync(ACC_FILE, JSON.stringify(accs, null, 2));
+}
+
+// --- Init demo accounts if empty ---
+function initDemoAccounts() {
+  const accs = loadAccounts();
+  if (accs.length === 0) {
+    accs.push({
+      discordId: '1338922988753518723',
+      passwordHash: 'demohash1',
+      role: 'Administrator',
+      partnerships: 0,
+      warnings: 0,
+      rate: 0,
+      status: 'active',
+      inbox: []
+    });
+    accs.push({
+      discordId: '500000000000000001',
+      passwordHash: 'demohash2',
+      role: 'Opiekun Realizatorów',
+      partnerships: 0,
+      warnings: 0,
+      rate: 0,
+      status: 'active',
+      inbox: []
+    });
+    saveAccounts(accs);
+    console.log('Demo accounts created');
+  }
 }
 
 // --- SSE clients ---
@@ -38,8 +67,7 @@ function sendSSE(data) {
 
 // GET all accounts
 app.get('/api/accounts', (req, res) => {
-  const accs = loadAccounts();
-  res.json(accs);
+  res.json(loadAccounts());
 });
 
 // POST new account
@@ -83,7 +111,6 @@ app.get('/events', (req, res) => {
   });
   res.flushHeaders();
 
-  // send welcome
   res.write(`data: ${JSON.stringify({ type:'welcome', payload:'connected'})}\n\n`);
 
   clients.push(res);
@@ -92,7 +119,8 @@ app.get('/events', (req, res) => {
   });
 });
 
-// start server
+// --- Start server ---
+initDemoAccounts();
 app.listen(PORT, () => {
   console.log(`Server działa na porcie ${PORT}`);
 });

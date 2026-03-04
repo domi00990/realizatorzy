@@ -1,84 +1,82 @@
-const express = require('express');
+// server.js
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
+const cors = require('cors');
 const bodyParser = require('body-parser');
-const crypto = require('crypto');
 
 const app = express();
-const PORT = 3000;
-const DATA_FILE = path.join(__dirname, 'accounts.json');
+const PORT = 3001;
+const ACC_FILE = path.join(__dirname, 'accounts.json');
 
-app.use(bodyParser.json());
-app.use(express.static(__dirname));
-
-// --- helpers ---
+// --- Storage helpers ---
 function loadAccounts() {
-  if (!fs.existsSync(DATA_FILE)) return [];
-  return JSON.parse(fs.readFileSync(DATA_FILE));
+  if (!fs.existsSync(ACC_FILE)) return [];
+  return JSON.parse(fs.readFileSync(ACC_FILE, 'utf8'));
+}
+function saveAccounts(accs) {
+  fs.writeFileSync(ACC_FILE, JSON.stringify(accs, null, 2));
 }
 
-function saveAccounts(accounts) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
+// --- SSE (Server-Sent Events) ---
+let clients = [];
+function sendSSE(data) {
+  clients.forEach(res => res.write(`data: ${JSON.stringify(data)}\n\n`));
 }
 
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
+// --- Middleware ---
+app.use(cors());
+app.use(bodyParser.json());
 
-// --- API ---
-
-// pobierz wszystkie konta
-app.get('/api/accounts', (req, res) => {
-  const accounts = loadAccounts();
-  res.json(accounts);
-});
-
-// rejestracja konta
-app.post('/api/register', (req, res) => {
-  const { discordId, password } = req.body;
-  if (!discordId || !password) return res.status(400).send('Brakuje danych');
-
-  const accounts = loadAccounts();
-  if (accounts.find(a => a.discordId === discordId)) return res.status(409).send('Konto już istnieje');
-
-  accounts.push({
-    discordId,
-    passwordHash: hashPassword(password),
-    role: 'user',
-    status: 'pending', // każde nowe konto jest pending
-    partnerships: 0,
-    warnings: 0,
-    rate: 0,
-    inbox: []
+// --- SSE endpoint ---
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
   });
+  res.write('\n');
+  clients.push(res);
 
-  saveAccounts(accounts);
-  res.status(201).send('Zarejestrowano, czekaj na akceptację admina');
+  req.on('close', () => {
+    clients = clients.filter(c => c !== res);
+  });
 });
 
-// logowanie
-app.post('/api/login', (req, res) => {
-  const { discordId, password } = req.body;
-  const accounts = loadAccounts();
-  const acc = accounts.find(a => a.discordId === discordId);
-  if (!acc) return res.status(404).send('Nie znaleziono konta');
-  if (acc.passwordHash !== hashPassword(password)) return res.status(401).send('Błędne hasło');
-  if (acc.status !== 'active') return res.status(403).send('Konto nieaktywne');
-
-  res.json({ message: 'Zalogowano', account: acc });
+// --- Get all accounts ---
+app.get('/api/accounts', (req, res) => {
+  const accs = loadAccounts();
+  res.json(accs);
 });
 
-// aktualizacja statusu konta (admin)
-app.put('/api/accounts/:discordId/status', (req, res) => {
-  const { status } = req.body;
-  const { discordId } = req.params;
-  const accounts = loadAccounts();
-  const acc = accounts.find(a => a.discordId === discordId);
-  if (!acc) return res.status(404).send('Nie znaleziono konta');
+// --- Create new account ---
+app.post('/api/accounts', (req, res) => {
+  const accs = loadAccounts();
+  const { discordId } = req.body;
+  if (accs.find(a => a.discordId === discordId)) return res.status(409).json({ error: 'ID exists' });
 
-  acc.status = status; // active / suspended / pending
-  saveAccounts(accounts);
-  res.send('Status zaktualizowany');
+  accs.push(req.body);
+  saveAccounts(accs);
+
+  sendSSE({ type: 'account-updated', payload: { id: discordId } });
+  res.status(201).json({ ok: true });
 });
 
-app.listen(PORT, () => console.log(`Server działa na http://localhost:${PORT}`));
+// --- Update account by ID ---
+app.put('/api/accounts/:id', (req, res) => {
+  const id = req.params.id;
+  let accs = loadAccounts();
+  const idx = accs.findIndex(a => a.discordId === id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+
+  accs[idx] = { ...accs[idx], ...req.body };
+  saveAccounts(accs);
+
+  sendSSE({ type: 'account-updated', payload: { id } });
+  res.json({ ok: true });
+});
+
+// --- Start server ---
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});

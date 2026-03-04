@@ -3,322 +3,569 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Portal Realizatorów — klient</title>
+  <title>Portal Realizatorów  Zimowe Reklamy</title>
   <style>
     :root{
-      --bg:#0f1724;
+      --bg:#0f1724; /* deep winter night */
       --card: rgba(255,255,255,0.03);
-      --accent:#7fd1ff;
+      --accent:#7fd1ff; /* icy cyan */
       --accent-2:#bfe9ff;
+      --glass: rgba(255,255,255,0.04);
       --muted: rgba(255,255,255,0.7);
+      --success: #9be7a8;
       --text: #e6f3ff;
       --card-border: rgba(255,255,255,0.02);
+      transition: background .45s ease, color .45s ease;
     }
-    *{box-sizing:border-box;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg) 0%, #0b2540 60%);color:var(--text)}
-    .wrap{max-width:1000px;margin:32px auto;padding:22px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 8px 30px rgba(2,6,23,0.7)}
-    header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#023047}
-    h1{margin:0;font-size:18px}
-    p.lead{margin:6px 0 0;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1fr 320px;gap:18px}
-    .card{background:var(--card);padding:16px;border-radius:10px;border:1px solid var(--card-border)}
-    label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
-    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-top:6px}
-    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border:none;cursor:pointer;font-weight:600;background:linear-gradient(90deg, rgba(127,209,255,0.12), rgba(191,233,255,0.06));backdrop-filter:blur(4px);color:var(--accent-2)}
+    /* light theme overrides */
+    .theme-light{
+      --bg: #f3f8ff; /* pale winter sky */
+      --card: rgba(2,6,23,0.03);
+      --accent:#0077b6;
+      --accent-2:#00aaff;
+      --glass: rgba(2,6,23,0.04);
+      --muted: rgba(2,6,23,0.65);
+      --success: #1f8a3f;
+      --text: #012133;
+      --card-border: rgba(2,6,23,0.06);
+    }
+
+    *{box-sizing:border-box;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg) 0%, #0b2540 60%);color:var(--text);transition:background .6s ease}
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle at 10% 10%, rgba(255,255,255,0.06) 0 1px, transparent 2px), radial-gradient(circle at 40% 20%, rgba(255,255,255,0.04) 0 1px, transparent 2px), radial-gradient(circle at 70% 80%, rgba(255,255,255,0.05) 0 1px, transparent 2px);background-size: 100px 100px, 140px 140px, 70px 70%;opacity:0.6;mix-blend-mode:screen;animation: drift 12s linear infinite;filter: blur(0.6px);}
+    @keyframes drift{0%{transform:translateY(-10vh)}100%{transform:translateY(110vh)}}
+
+    .wrap{max-width:1000px;margin:40px auto;padding:28px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 8px 30px rgba(2,6,23,0.7);}
+    header{display:flex;align-items:center;gap:16px}
+    .logo{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(125,209,255,0.12);font-weight:700;color:#023047}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:6px 0 24px;color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:20px}
+
+    .card{background:var(--card);padding:18px;border-radius:12px;border:1px solid var(--card-border)}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-bottom:12px}
+
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:none;cursor:pointer;font-weight:600;background:linear-gradient(90deg, rgba(127,209,255,0.12), rgba(191,233,255,0.06));backdrop-filter:blur(6px);color:var(--accent-2);box-shadow:0 6px 18px rgba(49,130,206,0.08);transition:transform .18s ease, box-shadow .18s}
+    .btn:active{transform:translateY(2px)}
     .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#003047}
     .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+
+    /* animated icy sheen */
+    .anim-ice{position:relative;overflow:hidden}
+    .anim-ice::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, transparent 100%);transform:translateX(-120%);transition:transform .8s}
+    .anim-ice:hover::after{transform:translateX(20%)}
+
     .muted{color:var(--muted);font-size:13px}
-    .list{max-height:420px;overflow:auto;padding-right:6px}
-    .user-row{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);margin-bottom:8px}
+    .user-row{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);margin-bottom:8px}
+    .user-meta{display:flex;gap:12px;align-items:center}
+    .role-badge{padding:6px 8px;border-radius:999px;font-size:12px;background:rgba(127,209,255,0.06);color:var(--accent-2)}
     .small{font-size:13px}
+
+    @media(max-width:920px){.grid{grid-template-columns:1fr;}.wrap{margin:14px}}
+
+    .mini{width:100px}
+    .list{max-height:420px;overflow:auto;padding-right:6px}
+    .flake{font-size:18px;margin-right:6px;opacity:0.9}
     footer{margin-top:18px;color:var(--muted);font-size:13px}
-    @media(max-width:920px){.grid{grid-template-columns:1fr;}}
-    .badge{padding:6px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,0.04)}
-    .log{font-size:13px;padding:8px;border-radius:8px;background:rgba(0,0,0,0.12);margin-bottom:6px}
+
+    /* role cards */
+    .roles{display:flex;gap:10px;margin-top:10px}
+    .role-card{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg,transparent,rgba(255,255,255,0.02));cursor:pointer;transition:transform .22s, box-shadow .22s, border-color .22s;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+    .role-card:hover{transform:translateY(-6px);box-shadow:0 14px 40px rgba(0,0,0,0.25)}
+    .role-card .title{font-weight:700}
+    .role-card.small{padding:8px}
+    .role-card.disabled{opacity:0.45;cursor:not-allowed;filter:grayscale(0.1)}
+
+    /* shimmer when selected */
+    .role-card.selected{box-shadow:0 10px 30px rgba(127,209,255,0.1);border-color:rgba(127,209,255,0.18);transform:scale(1.03)}
+
+    /* theme toggle */
+    .theme-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.06);background:linear-gradient(90deg, rgba(255,255,255,0.02), transparent);cursor:pointer}
+    .switch{width:44px;height:24px;border-radius:999px;background:rgba(255,255,255,0.06);position:relative;padding:3px}
+    .knob{width:18px;height:18px;border-radius:50%;background:var(--accent-2);position:absolute;left:3px;top:3px;transition:left .22s}
+    .switch.on{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+    .switch.on .knob{left:23px}
+
+    .note{font-size:13px;color:var(--muted);margin-top:8px}
+
+    /* loader */
+    #loader{position:fixed;inset:0;background:linear-gradient(180deg,rgba(2,6,23,0.6),rgba(2,6,23,0.8));display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter: blur(4px);opacity:0;pointer-events:none;transition:opacity .28s}
+    #loader.show{opacity:1;pointer-events:auto}
+    .spinner{width:68px;height:68px;border-radius:50%;border:6px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite;display:flex;align-items:center;justify-content:center}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* toast */
+    #toast{position:fixed;right:20px;bottom:20px;z-index:10001;border-radius:10px;padding:10px 14px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#023047;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+
+    /* animated numbers */
+    .count{font-weight:700;font-size:20px}
+
+    /* snow canvas */
+    #snowCanvas{position:fixed;left:0;top:0;pointer-events:none;z-index:0}
+
+    /* calendar */
+    .calendar{display:flex;gap:12px;flex-direction:column}
     .task-row{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);margin-bottom:6px}
+
+    /* logs */
+    .log{font-size:13px;padding:8px;border-radius:8px;background:rgba(0,0,0,0.12);margin-bottom:6px}
+
+    /* small badges */
+    .badge{padding:6px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,0.04)}
+
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <canvas id="snowCanvas"></canvas>
+  <div id="loader"><div class="spinner"></div></div>
+  <div id="toast" style="display:none"></div>
+
+  <div class="wrap" style="position:relative;z-index:1">
     <header>
       <div class="logo">❄️</div>
       <div style="flex:1">
-        <h1>Portal Realizatorów</h1>
-        <p class="lead">Zaloguj się lub zarejestruj. Admin widzi rejestracje na żywo (real-time).</p>
+        <h1>Portal Realizatorów </h1>
+        <p class="lead">Zaloguj się lub zarejestruj. Jeśli potrzebujesz pomocy, prosimy o kontakt.</p>
       </div>
-      <div style="text-align:right">
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <div class="theme-toggle" id="themeToggle" title="Przełącz motyw">
+          <div class="switch" id="themeSwitch"><div class="knob"></div></div>
+          <div class="small muted" id="themeLabel">Auto</div>
+        </div>
         <div class="muted small">Zimowe Reklamy</div>
       </div>
     </header>
 
     <div class="grid">
       <div id="main" class="card">
-        <!-- zawartość renderowana przez JS -->
+        <!-- auth and dashboard injected here -->
       </div>
 
       <div class="card">
         <h3>Szybkie akcje</h3>
-        <p class="muted">Zarejestruj konto lub zaloguj się.</p>
+        <p class="muted">Zarejestruj konto lub zaloguj się. </p>
         <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn primary" id="showLogin">Zaloguj</button>
-          <button class="btn ghost" id="showRegister">Zarejestruj</button>
+          <button class="btn anim-ice" id="showLogin">Zaloguj</button>
+          <button class="btn ghost anim-ice" id="showRegister">Zarejestruj</button>
         </div>
-        <hr style="margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">
-        <div class="muted small">Uwaga: ten klient wymaga backendu API pod ścieżkami <code>/api/*</code>.</div>
+        <hr style="margin:14px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">
       </div>
     </div>
-
-    <footer class="muted">Plik klienta — upewnij się, że serwer (Express) działa i serwuje ten plik z katalogu public/.</footer>
   </div>
 
   <script>
-  (function(){
-    // API base (pusty znaczy ten sam host)
-    const API = '';
-
-    // UI refs
-    const main = document.getElementById('main');
-    const showLoginBtn = document.getElementById('showLogin');
-    const showRegisterBtn = document.getElementById('showRegister');
-
-    showLoginBtn.onclick = () => renderAuth();
-    showRegisterBtn.onclick = () => renderRegister();
-
-    // session
+  (async function(){
+    // Keys for storage
+    const ACC_KEY = 'rp_accounts_v2';
     const SESSION_KEY = 'rp_session_v2';
+    const THEME_KEY = 'rp_theme_v2';
+    const TASK_KEY = 'rp_tasks_v1';
+    const LOG_KEY = 'rp_logs_v1';
+
+    // --- inter-tab realtime channel ---
+    const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('rp_channel') : null;
+    function broadcast(type, payload){
+      try{ if(bc) bc.postMessage({type,payload}); else localStorage.setItem('rp_bc_tmp', JSON.stringify({t:Date.now(),type,payload})); }catch(e){/*noop*/}
+    }
+    if(!bc){ window.addEventListener('storage', (e)=>{ if(e.key==='rp_bc_tmp' && e.newValue){ try{ const d=JSON.parse(e.newValue); handleBroadcast(d.type,d.payload); }catch{} }}); }
+    if(bc) bc.onmessage = (m)=>{ handleBroadcast(m.data.type,m.data.payload); };
+
+    function handleBroadcast(type,payload){
+      if(type==='notify') showToast(payload.title, payload.msg);
+      if(type==='account-updated') {
+        // if it's for current user, refresh dashboard
+        if(getSession() && payload.id === getSession()){ renderDashboard(); showToast('Konto zaktualizowane','Twoje konto zostało zmienione przez administratora.'); }
+      }
+      if(type==='message'){
+        if(getSession() && payload.to === getSession()) showToast('Nowa wiadomość', payload.subject);
+      }
+    }
+
+    // --- CRYPTO helpers (browser Web Crypto API) ---
+    async function hashPassword(password){
+      const enc = new TextEncoder();
+      const data = enc.encode(password);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+
+    // Secure compare
+    function safeEqual(a,b){ if(!a||!b) return false; if(a.length !== b.length) return false; let res = 0; for(let i=0;i<a.length;i++) res |= a.charCodeAt(i) ^ b.charCodeAt(i); return res === 0; }
+
+    // --- storage helpers ---
+    function saveAccounts(accs){ localStorage.setItem(ACC_KEY, JSON.stringify(accs)); }
+    function loadAccounts(){ return JSON.parse(localStorage.getItem(ACC_KEY) || '[]'); }
     function setSession(id){ sessionStorage.setItem(SESSION_KEY, id); }
     function getSession(){ return sessionStorage.getItem(SESSION_KEY); }
     function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
 
-    // helpers
-    async function api(path, opts = {}){
-      const res = await fetch(API + path, opts);
-      const ct = res.headers.get('content-type') || '';
-      if(res.status >= 400){
-        let err = {};
-        if(ct.includes('application/json')) err = await res.json().catch(()=>({}));
-        throw err;
+    function saveTasks(t){ localStorage.setItem(TASK_KEY, JSON.stringify(t)); }
+    function loadTasks(){ return JSON.parse(localStorage.getItem(TASK_KEY) || '[]'); }
+
+    function saveLogs(l){ localStorage.setItem(LOG_KEY, JSON.stringify(l)); }
+    function loadLogs(){ return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); }
+    function pushLog(action, actor, target, details){ const logs = loadLogs(); logs.unshift({time:new Date().toISOString(),action,actor,target,details}); saveLogs(logs); }
+
+    // --- UI refs ---
+    const main = document.getElementById('main');
+    const showLoginBtn = document.getElementById('showLogin');
+    const showRegisterBtn = document.getElementById('showRegister');
+    const themeToggle = document.getElementById('themeToggle');
+    const themeSwitch = document.getElementById('themeSwitch');
+    const themeLabel = document.getElementById('themeLabel');
+
+    // loader and toast
+    const loader = document.getElementById('loader');
+    const toastEl = document.getElementById('toast');
+    function showLoader(){ loader.classList.add('show'); }
+    function hideLoader(){ loader.classList.remove('show'); }
+    let toastTimer = null;
+    function showToast(title, msg='', timeout=4500){ toastEl.style.display='block'; toastEl.innerHTML = `<strong>${title}</strong><div style="font-size:13px">${msg}</div>`; clearTimeout(toastTimer); toastTimer = setTimeout(()=>{ toastEl.style.display='none'; }, timeout); }
+
+    // --- theme handling with animated transition ---
+    function applyTheme(name){ document.documentElement.classList.toggle('theme-light', name === 'light');
+      if(name === 'auto'){ themeLabel.textContent = 'Auto'; themeSwitch.classList.remove('on'); }
+      else if(name === 'dark'){ themeLabel.textContent = 'Ciemny'; themeSwitch.classList.remove('on'); }
+      else { themeLabel.textContent = 'Jasny'; themeSwitch.classList.add('on'); }
+      localStorage.setItem(THEME_KEY, name);
+    }
+    function loadTheme(){ const t = localStorage.getItem(THEME_KEY) || 'auto'; applyTheme(t); }
+    themeToggle.onclick = ()=>{ const cur = localStorage.getItem(THEME_KEY) || 'auto'; const next = cur === 'auto' ? 'dark' : cur === 'dark' ? 'light' : 'auto'; applyTheme(next); }
+    loadTheme();
+
+    // --- init demo accounts (hash passwords) ---
+    async function initDemo(){ let accs = loadAccounts(); if(!accs || accs.length === 0){ accs = [];
+        accs.push({discordId:'1338922988753518723', passwordHash: await hashPassword('Domi'), role:'Administrator', partnerships:0, warnings:0, rate:0, status:'active', inbox:[]});
+        accs.push({discordId:'500000000000000001', passwordHash: await hashPassword('Opiekun1'), role:'Opiekun Realizatorów', partnerships:0, warnings:0, rate:0, status:'active', inbox:[]});
+        saveAccounts(accs);
+        pushLog('init-demo','system','all','Utworzono konta demo');
+      } else {
+        // migrate plain password if any
+        let changed=false;
+        for(let a of accs){ if(a.password && !a.passwordHash){ a.passwordHash = await hashPassword(a.password); delete a.password; changed=true; } if(!a.status) { a.status = 'active'; changed=true;} if(!a.inbox) a.inbox = []; }
+        if(changed) saveAccounts(accs);
       }
-      if(ct.includes('application/json')) return await res.json();
-      return null;
-    }
-    function showToast(msg){ alert(msg); }
-
-    // render views
-    function renderAuth(){
-      main.innerHTML = `
-        <h2>Zaloguj</h2>
-        <div class="muted">Użyj ID Discord i hasła.</div>
-        <div style="margin-top:12px">
-          <label>ID Discord</label><input id="loginId" placeholder="np. 1338922988753518723">
-          <label>Hasło</label><input id="loginPass" type="password" placeholder="Twoje hasło">
-          <div style="display:flex;gap:10px;margin-top:8px">
-            <button class="btn primary" id="doLogin">Zaloguj</button>
-            <button class="btn ghost" id="toRegister">Przejdź do rejestracji</button>
-          </div>
-          <p id="authMsg" class="muted" style="margin-top:10px"></p>
-        </div>
-      `;
-      document.getElementById('doLogin').onclick = doLogin;
-      document.getElementById('toRegister').onclick = renderRegister;
     }
 
-    function renderRegister(){
-      main.innerHTML = `
-        <h2>Zarejestruj</h2>
-        <div class="muted">Twoje konto zostanie wysłane do kolejki zatwierdzeń (status: pending).</div>
-        <div style="margin-top:12px">
-          <label>ID Discord</label><input id="regId" placeholder="wpisz ID Discord">
-          <label>Hasło</label><input id="regPass" type="password" placeholder="ustaw hasło">
-          <label>Rola</label>
-          <select id="regRole">
-            <option>Realizator Partnerstw</option>
-            <option>Weekendowy Realizator Partnerstw</option>
-          </select>
-          <div style="display:flex;gap:10px;margin-top:8px">
-            <button class="btn primary" id="doRegister">Zarejestruj</button>
-            <button class="btn ghost" id="toLogin">Przejdź do logowania</button>
+    // UI wiring
+    showLoginBtn.onclick = () => renderAuth('login');
+    showRegisterBtn.onclick = () => renderAuth('register');
+
+    // Role cards helper (registration) - OPIEKUN cannot be self-selected
+    function roleCardHTML(selectedRole){
+      return `
+        <div class="roles">
+          <div class="role-card" data-role="Realizator Partnerstw">
+            <div class="title">Realizator Partnerstw</div>
+            <div class="muted small">Wybierz jeśli jesteś Realizatorem Partnerstw</div>
           </div>
-          <p id="regMsg" class="muted" style="margin-top:10px"></p>
+          <div class="role-card" data-role="Weekendowy Realizator Partnerstw">
+            <div class="title">Weekendowy Realizator Partnerstw</div>
+            <div class="muted small">Wybierz jeśli jesteś Weekendowym Realizatorem Partnerstw</div>
+          </div>
+          <div class="role-card disabled" data-role="Opiekun Realizatorów" title="Tylko administrator może przyznać tę rolę">
+            <div class="title">Opiekun Realizatorów</div>
+            <div class="muted small">Nie można zarejestrować - rolę nadaje administrator</div>
+          </div>
         </div>
       `;
-      document.getElementById('doRegister').onclick = doRegister;
-      document.getElementById('toLogin').onclick = renderAuth;
+    }
+
+    // render auth (login/register) with loader
+    function renderAuth(mode='login'){
+      if(mode==='login'){
+        main.innerHTML = `
+          <h2>Zaloguj</h2>
+          <div class="muted">Zaloguj się używając ID konta Discord i hasła. Konto musi mieć status <em>active</em> (zatwierdzone przez administratora).</div>
+          <div style="margin-top:12px">
+            <label>ID Discord</label><input id="loginId" placeholder="np. 1338922988753518723">
+            <label>Hasło</label><input id="loginPass" type="password" placeholder="Twoje hasło">
+            <div style="display:flex;gap:10px;margin-top:8px">
+              <button class="btn primary anim-ice" id="doLogin">Zaloguj</button>
+              <button class="btn ghost" id="toRegister">Przejdź do rejestracji</button>
+            </div>
+            <p id="authMsg" class="muted" style="margin-top:10px"></p>
+          </div>
+        `;
+        document.getElementById('doLogin').onclick = doLogin;
+        document.getElementById('toRegister').onclick = () => renderAuth('register');
+      } else {
+        main.innerHTML = `
+          <h2>Zarejestruj</h2>
+          <div class="muted">Wybierz rolę podczas rejestracji. Twoje konto trafi do kolejki zatwierdzeń - administrator musi je aktywować, aby działało normalnie.</div>
+          <div style="margin-top:12px">
+            <label>ID Discord</label><input id="regId" placeholder="wpisz ID Discord">
+            <label>Hasło</label><input id="regPass" type="password" placeholder="ustaw hasło">
+            <label>Rola</label>
+            ${roleCardHTML()}
+            <div style="display:flex;gap:10px;margin-top:8px">
+              <button class="btn primary anim-ice" id="doRegister">Zarejestruj</button>
+              <button class="btn ghost" id="toLogin">Przejdź do logowania</button>
+            </div>
+            <p id="regMsg" class="muted" style="margin-top:10px"></p>
+          </div>
+        `;
+        // make role cards interactive
+        document.querySelectorAll('.role-card').forEach(rc=>{ rc.onclick = ()=>{ if(rc.classList.contains('disabled')){ document.getElementById('regMsg').textContent = 'Tę rolę może nadać tylko administrator.'; return; } document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected')); rc.classList.add('selected'); document.getElementById('regMsg').textContent = 'Wybrano rolę: ' + rc.dataset.role; } });
+        document.getElementById('doRegister').onclick = doRegister;
+        document.getElementById('toLogin').onclick = () => renderAuth('login');
+      }
     }
 
     async function doRegister(){
       const id = document.getElementById('regId').value.trim();
       const pass = document.getElementById('regPass').value;
-      const role = document.getElementById('regRole').value;
       const msg = document.getElementById('regMsg');
-      msg.textContent = '';
-      if(!id || !pass){ msg.textContent = 'Wypełnij wszystkie pola.'; return }
-      try{
-        await api('/api/register', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ discordId: id, password: pass, role })
-        });
-        msg.textContent = 'Zarejestrowano. Konto oczekuje na zatwierdzenie przez administratora.';
-        setTimeout(renderAuth, 900);
-      }catch(err){
-        msg.textContent = err.error || 'Błąd rejestracji';
-      }
+      const sel = document.querySelector('.role-card.selected');
+      if(!id || !pass){msg.textContent='Wypełnij wszystkie pola.';return}
+      if(!sel){msg.textContent='Wybierz rolę.';return}
+      const role = sel.dataset.role;
+      if(role === 'Opiekun Realizatorów'){msg.textContent='Tę rolę może przydzielić tylko administrator.';return}
+      const accs = loadAccounts();
+      if(accs.find(a=>a.discordId===id)){msg.textContent='Konto o takim ID już istnieje.';return}
+      showLoader();
+      const hashed = await hashPassword(pass);
+      // create pending account
+      const newAcc = {discordId:id, passwordHash:hashed, role:role, partnerships:0, warnings:0, rate:0, status:'pending', inbox:[]};
+      accs.push(newAcc); saveAccounts(accs);
+      pushLog('register', id, id, `Rejestracja, status:pending`);
+      broadcast('notify',{title:'Nowa rejestracja', msg:`Konto ${id} oczekuje na zatwierdzenie przez admina.`});
+      hideLoader();
+      msg.textContent='Zarejestrowano. Konto oczekuje na zatwierdzenie przez administratora.';
+      setTimeout(()=>renderAuth('login'),900);
     }
 
     async function doLogin(){
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value;
       const msg = document.getElementById('authMsg');
-      msg.textContent = '';
-      if(!id || !pass){ msg.textContent = 'Wypełnij wszystkie pola.'; return }
-      try{
-        const r = await api('/api/login', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ discordId: id, password: pass })
-        });
-        if(r.status !== 'active'){ msg.textContent = 'Konto nieaktywne: ' + r.status; return }
-        setSession(r.discordId);
-        renderDashboard();
-      }catch(err){
-        msg.textContent = 'Błędne ID lub hasło.';
+      if(!id || !pass){msg.textContent='Wypełnij wszystkie pola.';return}
+      const accs = loadAccounts();
+      const acc = accs.find(a=>a.discordId===id);
+      if(!acc){msg.textContent='Błędne ID lub hasło.';return}
+      showLoader();
+      const hashed = await hashPassword(pass);
+      if(!safeEqual(hashed, acc.passwordHash || '')){ hideLoader(); msg.textContent='Błędne ID lub hasło.'; return }
+      // check status
+      if(acc.status !== 'active'){
+        hideLoader(); if(acc.status === 'pending') msg.textContent = 'Konto nieaktywne: oczekuje na zatwierdzenie przez administratora.'; else msg.textContent = 'Konto zablokowane/suspendowane. Skontaktuj się z administratorem.'; return
       }
+      setSession(id);
+      pushLog('login', id, id, 'Zalogowano');
+      hideLoader(); renderDashboard();
     }
 
-    async function renderDashboard(){
+    // Dashboard views
+    function renderDashboard(){
       const id = getSession();
-      if(!id){ renderAuth(); return }
-      // pobierz widok kont (dane safe z /api/accounts)
-      let accounts = [];
-      try{ accounts = await api('/api/accounts'); }catch(e){ accounts = []; }
-      const me = accounts.find(a => a.discordId === id) || { discordId: id, role: 'Realizator Partnerstw', status: 'active', partnerships:0, warnings:0, rate:0 };
+      if(!id){ renderAuth('login'); return }
+      const accs = loadAccounts();
+      const me = accs.find(a=>a.discordId===id);
+      if(!me){ clearSession(); renderAuth('login'); return }
 
-      let html = `<div style="display:flex;justify-content:space-between;align-items:center"><div><h2>Witaj, ${me.role}</h2><div class="muted">ID: ${me.discordId} • Status: <span class="badge">${me.status}</span></div></div><div><button class="btn ghost" id="doLogout">Wyloguj</button></div></div><hr style="margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">`;
+      let html = `<div style=\"display:flex;justify-content:space-between;align-items:center\">`;
+      html += `<div><h2>Witaj, ${me.role}</h2><div class=\"muted\">ID: ${me.discordId} • Status: <span class=\"badge\">${me.status}</span></div></div>`;
+      html += `<div style=\"display:flex;gap:10px;align-items:center\"><button class=\"btn ghost\" id=\"doLogout\">Wyloguj</button></div></div><hr style=\"margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)\">`;
 
       if(me.role === 'Administrator'){
-        html += `<h3>Panel administratora</h3><p class="muted">Zatwierdzaj rejestracje, wysyłaj wiadomości.</p>`;
-        html += `<div class="list">` + accounts.map(a=>`
-          <div class="user-row">
-            <div>
-              <strong>${a.discordId}</strong>
-              <div class="muted small">${a.role} • status: ${a.status}</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              ${a.status === 'pending' ? `<button class="btn primary approve-user" data-id="${a.discordId}">Zatwierdź</button>` : ''}
-              <button class="btn ghost send-msg" data-id="${a.discordId}">Wyślij wiadomość</button>
-            </div>
-          </div>
-        `).join('') + `</div>`;
-
-        html += `<div style="margin-top:12px"><h4>Historia aktywności</h4><div id="adminLogs" class="muted small">Brak logów klienta (serwer zapisuje logs w accounts.json jeśli skonfigurowany).</div></div>`;
+        html += adminPanelHTML(loadAccounts(), me.discordId);
       } else if(me.role === 'Opiekun Realizatorów'){
-        html += `<h3>Panel Opiekuna</h3><div class="muted">Możesz edytować panele realizatorów (w tej wersji: tylko przegląd).</div>`;
-        html += `<div class="list">` + accounts.filter(a=>a.role && a.role.startsWith('Realizator')).map(a=>`
-          <div class="user-row"><div><strong>${a.discordId}</strong><div class="muted small">${a.role} • ${a.status}</div></div><div><button class="btn" onclick="alert('Edytuj panel (dodaj endpointy jeśli chcesz)')">Edytuj</button></div></div>
-        `).join('') + `</div>`;
+        html += opiekunPanelHTML(loadAccounts());
       } else {
-        html += `<h3>Panel Realizatora</h3><div class="muted small">Twoje dane:</div>
-          <div style="margin-top:12px">
-            <p><strong>ID:</strong> ${me.discordId}</p>
-            <p><strong>Rola:</strong> ${me.role}</p>
-            <p><strong>Partnerstw:</strong> ${me.partnerships||0}</p>
-            <p><strong>Ostrzeżeń:</strong> ${me.warnings||0}</p>
-            <p><strong>Stawka:</strong> ${me.rate||0}</p>
-          </div>
-          <div style="margin-top:12px"><h4>Wiadomości wewnętrzne</h4><div id="myInbox" class="muted small">Ładuję...</div></div>
-        `;
+        html += realizatorPanelHTML(me);
       }
 
       main.innerHTML = html;
-      document.getElementById('doLogout').onclick = ()=>{ clearSession(); renderAuth(); };
+      document.getElementById('doLogout').onclick = () => { pushLog('logout', me.discordId, me.discordId, 'Wylogowano'); clearSession(); renderAuth('login'); };
 
-      // attach handlers
-      document.querySelectorAll('.approve-user').forEach(b => b.onclick = async ()=>{ const did = b.dataset.id; try{ await api('/api/approve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ discordId: did }) }); showToast('Zatwierdzono ' + did); renderDashboard(); }catch(e){ showToast('Błąd zatwierdzania'); } });
-      document.querySelectorAll('.send-msg').forEach(b => b.onclick = ()=> openSendMessage(b.dataset.id) );
+      if(me.role==='Administrator') attachAdminHandlers();
+      if(me.role==='Opiekun Realizatorów') attachOpiekunHandlers();
+      if(me.role.startsWith('Realizator')) attachRealizatorHandlers(me.discordId);
 
-      // render inbox for non-admins
-      if(me.role !== 'Administrator'){
-        renderInbox(me.discordId, accounts);
-      }
+      // if have unread messages, show small toast
+      const unread = me.inbox ? me.inbox.filter(m=>!m.read).length : 0;
+      if(unread>0) showToast('Nowe wiadomości', `Masz ${unread} nieprzeczytanych wiadomości.`);
     }
 
-    function openSendMessage(to){
-      const editorHtml = `
-        <div style="margin-top:12px">
-          <h4>Wyślij wiadomość do ${to}</h4>
-          <label>Temat</label><input id="msgSub">
-          <label>Treść</label><textarea id="msgBody" style="height:100px"></textarea>
-          <div style="margin-top:8px"><button class="btn primary" id="sendMsgBtn">Wyślij</button> <button class="btn ghost" id="msgCancel">Anuluj</button></div>
+    function adminPanelHTML(accs, myId){
+      let pending = accs.filter(a=>a.status==='pending');
+      let html = `<h3>Panel administratora</h3><p class=\"muted\">Możesz edytować wszystkie konta, zatwierdzać rejestracje, zawieszać konta oraz przeglądać historię zdarzeń.</p>`;
+      html += `<div style=\"display:flex;gap:12px;margin-top:8px\"><div style=\"flex:1\"><h4>Kontrola kont</h4><div class=\"list\">`;
+      accs.forEach((a,idx)=>{ html += `<div class=\"user-row\"> <div class=\"user-meta\"><div><strong>${a.discordId}</strong><div class=\"muted small\">${a.role} • status: ${a.status}</div></div></div> <div style=\"display:flex;gap:8px;align-items:center\"> <button class=\"btn ghost edit-user\" data-idx=\"${idx}\">Edytuj</button>`;
+        if(a.discordId !== myId) html += `<button class=\"btn\" data-idx=\"${idx}\" onclick=\"window.deleteUser(${idx})\">Usuń</button>`;
+        if(a.status==='pending') html += `<button class=\"btn primary approve-user\" data-id=\"${a.discordId}\">Zatwierdź</button>`;
+        if(a.status==='active') html += `<button class=\"btn\" data-id=\"${a.discordId}\" onclick=\"window.suspendUser('${a.discordId}')\">Zawieś</button>`;
+        if(a.status==='suspended') html += `<button class=\"btn primary\" data-id=\"${a.discordId}\" onclick=\"window.activateUser('${a.discordId}')\">Aktywuj</button>`;
+        html += `<button class=\"btn ghost send-msg\" data-id=\"${a.discordId}\">Wyślij wiadomość</button>`;
+        html += `</div></div>`;
+      });
+      html += `</div></div>`;
+
+      // admin quick add
+      html += `<div style=\"width:320px;\">`;
+      html += `<h4>Dodaj konto ręcznie</h4>`;
+      html += `<label>ID Discord</label><input id=\"adminNewId\" placeholder=\"ID\">`;
+      html += `<label>Hasło</label><input id=\"adminNewPass\" placeholder=\"hasło\">`;
+      html += `<label>Rola</label><select id=\"adminNewRole\"><option>Realizator Partnerstw</option><option>Weekendowy Realizator Partnerstw</option><option>Opiekun Realizatorów</option><option>Administrator</option></select>`;
+      html += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"adminAdd\">Dodaj</button><button class=\"btn ghost\" id=\"adminRefresh\">Odśwież</button></div>`;
+      html += `<div style=\"margin-top:12px\"><h4>Rejestracje oczekujące</h4>`;
+      pending.forEach(p=>{ html += `<div class=\"user-row\"><div><strong>${p.discordId}</strong><div class=\"muted small\">${p.role}</div></div><div><button class=\"btn primary approve-user\" data-id=\"${p.discordId}\">Zatwierdź</button><button class=\"btn\" onclick=\"window.suspendUser('${p.discordId}')\">Zawieś</button></div></div>`; });
+      html += `</div></div></div>`;
+
+      // logs and tasks
+      html += `<div style=\"margin-top:12px\"><h4>Historia aktywności</h4><div id=\"adminLogs\" style=\"max-height:200px;overflow:auto\"></div></div>`;
+      html += `</div>`;
+      return html;
+    }
+
+    function opiekunPanelHTML(accs){
+      const realizators = accs.filter(a => a.role === 'Realizator Partnerstw' || a.role === 'Weekendowy Realizator Partnerstw');
+      let html = `<h3>Panel Opiekuna Realizatorów</h3><p class=\"muted\">Możesz edytować tylko panel realizatora (partnerstwa, ostrzeżenia, stawka), zarządzać zadaniami i widzieć historię.</p>`;
+      html += `<div class=\"list\">`;
+      realizators.forEach((a,idx)=>{
+        html += `<div class=\"user-row\">`;
+        html += `<div class=\"user-meta\"><div><strong>${a.discordId}</strong><div class=\"muted small\">${a.role} • status: ${a.status}</div></div></div>`;
+        html += `<div style=\"display:flex;gap:8px;align-items:center\">`;
+        html += `<button class=\"btn edit-real\" data-id=\"${a.discordId}\">Edytuj panel</button>`;
+        html += `</div></div>`;
+      });
+      html += `</div><div id=\"opiekunEditor\" style=\"margin-top:10px\"></div>`;
+      html += `<div style=\"margin-top:12px\"><h4>Zadania</h4><div id=\"opiekunTasks\"></div></div>`;
+      html += `<div style=\"margin-top:12px\"><h4>Historia aktywności</h4><div id=\"opiekunLogs\" style=\"max-height:160px;overflow:auto\"></div></div>`;
+      return html;
+    }
+
+    function realizatorPanelHTML(me){
+      return `<h3>Panel Realizatora</h3><div class=\"muted small\">Twoje dane:</div>
+        <div style=\"margin-top:12px\"> 
+          <p><strong>ID:</strong> ${me.discordId}</p>
+          <p><strong>Rola:</strong> ${me.role}</p>
+          <p><strong>Partnerstw:</strong> <span class=\"count\" id=\"numPartners\">${me.partnerships}</span></p>
+          <p><strong>Ostrzeżeń:</strong> ${me.warnings}</p>
+          <p><strong>Stawka:</strong> ${me.rate}</p>
         </div>
+        <div style=\"margin-top:12px\"><h4>Kalendarz i zadania</h4><div id=\"myCalendar\"></div></div>
+        <div style=\"margin-top:12px\"><h4>Wiadomości wewnętrzne</h4><div id=\"myInbox\"></div></div>
       `;
-      // w prostym podejściu wstawimy formularz na główny obszar i dodamy handler
-      const container = document.createElement('div');
-      container.className = 'card';
-      container.innerHTML = editorHtml;
-      main.prepend(container);
-      document.getElementById('msgCancel').onclick = ()=> container.remove();
-      document.getElementById('sendMsgBtn').onclick = async () => {
-        const sub = document.getElementById('msgSub').value.trim();
-        const body = document.getElementById('msgBody').value.trim();
-        if(!sub || !body) return alert('Uzupełnij temat i treść');
-        try{
-          await api('/api/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ to, from: getSession(), subject: sub, body }) });
-          showToast('Wiadomość wysłana');
-          container.remove();
-          renderDashboard();
-        }catch(e){ showToast('Błąd wysyłania'); }
+    }
+
+    // Admin handlers
+    function attachAdminHandlers(){
+      document.querySelectorAll('.edit-user').forEach(btn=>{ btn.onclick = (e)=>{ const idx = btn.dataset.idx || btn.closest('.user-row').dataset.idx; openAdminEdit(parseInt(idx,10)); } });
+      document.getElementById('adminAdd').onclick = async ()=>{ const id = document.getElementById('adminNewId').value.trim(); const pass = document.getElementById('adminNewPass').value; const role = document.getElementById('adminNewRole').value; if(!id||!pass){alert('Wypełnij ID i hasło');return} const accs = loadAccounts(); if(accs.find(a=>a.discordId===id)){alert('Istnieje konto o takim ID');return} showLoader(); const hashed = await hashPassword(pass); accs.push({discordId:id,passwordHash:hashed,role:role,partnerships:0,warnings:0,rate:0,status:'active',inbox:[]}); saveAccounts(accs); pushLog('admin-add', getSession(), id, `Dodano konto ręcznie przez admina`); broadcast('notify',{title:'Nowe konto', msg:`Konto ${id} utworzone przez admina.`}); hideLoader(); renderDashboard(); };
+      document.getElementById('adminRefresh').onclick = ()=>renderDashboard();
+
+      // approve buttons
+      document.querySelectorAll('.approve-user').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.id; approveAccount(id); } });
+      // send message
+      document.querySelectorAll('.send-msg').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.id; openSendMessage(id); } });
+
+      // render logs
+      const logs = loadLogs(); const lcontainer = document.getElementById('adminLogs'); lcontainer.innerHTML = logs.map(l=>`<div class=\"log\"><div style=\"font-weight:700\">${l.action}</div><div style=\"font-size:13px\">${l.time} • actor: ${l.actor} • target: ${l.target}</div><div style=\"margin-top:6px;font-size:13px;color:var(--muted)\">${l.details}</div></div>`).join('');
+    }
+
+    async function openAdminEdit(idx){ const accs = loadAccounts(); const a = accs[idx]; if(!a) return; const editor = document.getElementById('adminEditor'); editor.innerHTML = `<h4>Edytuj konto ${a.discordId}</h4>`; editor.innerHTML += `<label>ID Discord</label><input id=\"editId\" value=\"${a.discordId}\">`; editor.innerHTML += `<label>Hasło (wpisz nowe lub pozostaw)</label><input id=\"editPass\">`; editor.innerHTML += `<label>Rola</label><select id=\"editRole\"><option ${a.role==='Realizator Partnerstw'?'selected':''}>Realizator Partnerstw</option><option ${a.role==='Weekendowy Realizator Partnerstw'?'selected':''}>Weekendowy Realizator Partnerstw</option><option ${a.role==='Opiekun Realizatorów'?'selected':''}>Opiekun Realizatorów</option><option ${a.role==='Administrator'?'selected':''}>Administrator</option></select>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"editPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"editWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"editRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<label>Status</label><select id=\"editStatus\"><option ${a.status==='active'?'selected':''}>active</option><option ${a.status==='pending'?'selected':''}>pending</option><option ${a.status==='suspended'?'selected':''}>suspended</option></select>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"saveEdit\">Zapisz</button><button class=\"btn ghost\" id=\"cancelEdit\">Anuluj</button></div>`;
+
+      document.getElementById('cancelEdit').onclick = () => { editor.innerHTML=''; };
+      document.getElementById('saveEdit').onclick = async () => {
+        const newId = document.getElementById('editId').value.trim(); const newPass = document.getElementById('editPass').value; const newRole = document.getElementById('editRole').value; const newPartners = parseInt(document.getElementById('editPartners').value||0,10); const newWarns = parseInt(document.getElementById('editWarns').value||0,10); const newRate = document.getElementById('editRate').value; const newStatus = document.getElementById('editStatus').value;
+        if(!newId){ alert('ID nie może być puste'); return }
+        const accs2 = loadAccounts(); const conflict = accs2.find((x,i)=>x.discordId===newId && i!==idx); if(conflict){ alert('ID zajęte przez inne konto'); return }
+        accs2[idx].discordId = newId; if(newPass && newPass.length>0){ accs2[idx].passwordHash = await hashPassword(newPass); }
+        accs2[idx].role = newRole; accs2[idx].partnerships = newPartners; accs2[idx].warnings = newWarns; accs2[idx].rate = newRate; accs2[idx].status = newStatus; saveAccounts(accs2);
+        pushLog('admin-edit', getSession(), newId, `Edycja konta przez admina`);
+        broadcast('account-updated',{id:newId}); editor.innerHTML=''; renderDashboard();
       };
     }
 
-    function renderInbox(myId, accounts){
-      try{
-        const me = accounts.find(a => a.discordId === myId) || null;
-        const container = document.getElementById('myInbox');
-        if(!container) return;
-        if(!me || !me.inbox || me.inbox.length === 0){
-          container.innerHTML = '<div class="muted">Brak wiadomości.</div>';
-          return;
-        }
-        container.innerHTML = me.inbox.map((m, idx)=>`
-          <div class="task-row">
-            <div>
-              <strong>${m.subject}</strong>
-              <div class="muted small">Od: ${m.from} • ${new Date(m.time).toLocaleString()}</div>
-              <div style="margin-top:8px">${m.body}</div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              ${m.read ? '<span class="muted small">przeczytane</span>' : `<button class="btn" data-idx="${idx}" onclick="(function(i){ fetch('/api/accounts').then(r=>r.json()).then(accs=>{ accs.forEach(a=>{ if(a.discordId==='${myId}'){ if(a.inbox && a.inbox[i]) a.inbox[i].read=true; } }); fetch('/api/accounts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(accs)}).then(()=>location.reload()); }); })( ${idx} )">Oznacz przeczytane</button>`}
-            </div>
-          </div>
-        `).join('');
-      }catch(e){
-        const container = document.getElementById('myInbox');
-        if(container) container.innerHTML = '<div class="muted">Błąd ładowania wiadomości.</div>';
-      }
+    // global delete
+    window.deleteUser = function(i){ if(!confirm('Usunąć to konto?')) return; const accs = loadAccounts(); const id = accs[i].discordId; accs.splice(i,1); saveAccounts(accs); pushLog('admin-delete', getSession(), id, `Usunięto konto`); if(getSession()===id) { clearSession(); renderAuth('login'); return; } renderDashboard(); }
+
+    // suspend/activate helpers
+    window.suspendUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'suspended'; saveAccounts(accs); pushLog('suspend', getSession(), id, 'Zawieszono konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zawieszone', msg:`Twoje konto ${id} zostało zawieszone.`}); renderDashboard(); }
+    window.activateUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('activate', getSession(), id, 'Aktywовано konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto aktywne', msg:`Twoje konto ${id} zostało aktywowane przez administratora.`}); renderDashboard(); }
+
+    function approveAccount(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('approve', getSession(), id, 'Zatwierdzono rejestrację'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zatwierdzone', msg:`Twoje konto ${id} zostało zatwierdzone.`}); renderDashboard(); }
+
+    // send internal message
+    function openSendMessage(to){ const editor = document.getElementById('adminEditor'); editor.innerHTML = `<h4>Wyślij wewnętrzną wiadomość do ${to}</h4>`; editor.innerHTML += `<label>Temat</label><input id=\"msgSub\">`; editor.innerHTML += `<label>Treść</label><textarea id=\"msgBody\"></textarea>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"sendMsgBtn\">Wyślij</button><button class=\"btn ghost\" id=\"msgCancel\">Anuluj</button></div>`;
+      document.getElementById('msgCancel').onclick = ()=>{ editor.innerHTML=''; };
+      document.getElementById('sendMsgBtn').onclick = ()=>{
+        const sub = document.getElementById('msgSub').value.trim(); const body = document.getElementById('msgBody').value.trim(); if(!sub||!body){ alert('Wypełnij temat i treść'); return }
+        const accs = loadAccounts(); const r = accs.find(x=>x.discordId===to); if(!r) return alert('Konto nie istnieje'); r.inbox = r.inbox || []; r.inbox.unshift({from:getSession(), subject:sub, body:body, time:new Date().toISOString(), read:false}); saveAccounts(accs); pushLog('message', getSession(), to, `Wysłano wiadomość: ${sub}`); broadcast('message',{to, subject:sub}); showToast('Wysłano wiadomość', `Do: ${to}`); editor.innerHTML=''; renderDashboard(); };
     }
 
-    // SSE: nasłuchuj eventów serwera i odśwież dashboard przy aktualizacjach
-    if(window.EventSource){
-      try{
-        const es = new EventSource(API + '/api/events');
-        es.onmessage = (e) => {
-          try{
-            const d = JSON.parse(e.data);
-            if(d.type === 'accounts-updated'){
-              if(getSession()) renderDashboard();
-            }
-          }catch(err){}
-        };
-      }catch(e){}
+    // opiekun handlers
+    function attachOpiekunHandlers(){ document.querySelectorAll('.edit-real').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.id; openOpiekunEdit(id); } });
+      // show tasks
+      renderOpiekunTasks(); const logs = loadLogs(); const lc = document.getElementById('opiekunLogs'); if(lc) lc.innerHTML = logs.slice(0,50).map(l=>`<div class=\"log\">${l.time} • ${l.action} • ${l.actor} → ${l.target}<div style=\"font-size:13px;color:var(--muted)\">${l.details}</div></div>`).join(''); }
+
+    function openOpiekunEdit(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono konta'); const editor = document.getElementById('opiekunEditor'); editor.innerHTML = `<h4>Edytuj panel realizatora ${a.discordId}</h4>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"oPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"oWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"oRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"oSave\">Zapisz</button><button class=\"btn ghost\" id=\"oCancel\">Anuluj</button></div>`;
+      document.getElementById('oCancel').onclick = ()=>{editor.innerHTML='';};
+      document.getElementById('oSave').onclick = ()=>{ const partners = parseInt(document.getElementById('oPartners').value||0,10); const warns = parseInt(document.getElementById('oWarns').value||0,10); const rate = document.getElementById('oRate').value; const accs2 = loadAccounts(); const a2 = accs2.find(x=>x.discordId===id); if(!a2) return alert('Błąd: konto zniknęło'); a2.partnerships = partners; a2.warnings = warns; a2.rate = rate; saveAccounts(accs2); pushLog('opiekun-edit', getSession(), id, 'Opiekun zaktualizował panel'); broadcast('account-updated',{id}); editor.innerHTML=''; renderDashboard(); };
     }
 
-    // start
-    if(getSession()) renderDashboard(); else renderAuth();
+    function attachRealizatorHandlers(myId){ // nothing heavy here — tasks and inbox handled elsewhere
+      renderMyCalendar(myId); renderInbox(myId);
+    }
 
-    // expose for simple debugging (opcjonalne)
-    window.rp = { renderAuth, renderRegister, renderDashboard, getSession, clearSession };
+    // animated numbers
+    function animateNumber(el, start, end, duration=900){ const startTime = performance.now(); function tick(now){ const t = Math.min(1,(now-startTime)/duration); const val = Math.floor(start + (end-start)*t); el.textContent = val; if(t<1) requestAnimationFrame(tick); } requestAnimationFrame(tick); }
+
+    // calendar & tasks
+    function renderMyCalendar(myId){ const container = document.getElementById('myCalendar'); const tasks = loadTasks().filter(t=>t.assignedTo===myId || t.assignedTo==='all'); container.innerHTML = `<div class=\"calendar\"><div style=\"display:flex;gap:8px\"><input type=\"date\" id=\"taskDate\"> <input id=\"taskTitle\" placeholder=\"Nowe zadanie\"> <button class=\"btn primary\" id=\"addTaskBtn\">Dodaj</button></div><div id=\"taskList\" style=\"margin-top:8px\"></div></div>`;
+      document.getElementById('addTaskBtn').onclick = ()=>{ const date = document.getElementById('taskDate').value; const title = document.getElementById('taskTitle').value.trim(); if(!date||!title){ alert('Uzupełnij date i tytuł'); return } const tasksAll = loadTasks(); const id = 't'+Date.now(); tasksAll.push({id,title,date,assignedTo:myId,createdBy:getSession(),done:false,reminder:null}); saveTasks(tasksAll); pushLog('task-add', getSession(), myId, `Dodano zadanie: ${title}`); renderMyCalendar(myId); }
+      renderTaskList(tasks, 'taskList'); }
+
+    function renderTaskList(tasks, containerId){ const c = document.getElementById(containerId); if(!c) return; c.innerHTML = tasks.map(t=>`<div class=\"task-row\"><div><strong>${t.title}</strong><div class=\"muted small\">${t.date} • ${t.assignedTo}</div></div><div style=\"display:flex;gap:8px\"><button class=\"btn\" data-id=\"${t.id}\" onclick=\"window.toggleTask('${t.id}')\">${t.done? '✔' : 'Oznacz'}</button><button class=\"btn ghost\" onclick=\"window.deleteTask('${t.id}')\">Usuń</button></div></div>`).join(''); }
+
+    window.toggleTask = function(id){ const tasks = loadTasks(); const t = tasks.find(x=>x.id===id); if(!t) return; t.done = !t.done; saveTasks(tasks); pushLog('task-toggle', getSession(), t.assignedTo, `Toggled task ${t.title}`); renderMyCalendar(getSession()); }
+    window.deleteTask = function(id){ if(!confirm('Usunąć zadanie?')) return; let tasks = loadTasks(); const t = tasks.find(x=>x.id===id); tasks = tasks.filter(x=>x.id!==id); saveTasks(tasks); pushLog('task-delete', getSession(), t.assignedTo, `Usunięto zadanie ${t.title}`); renderMyCalendar(getSession()); }
+
+    function renderOpiekunTasks(){ const container = document.getElementById('opiekunTasks'); const tasks = loadTasks(); if(!container) return; container.innerHTML = tasks.map(t=>`<div class=\"task-row\"><div><strong>${t.title}</strong><div class=\"muted small\">${t.date} • ${t.assignedTo}</div></div><div style=\"display:flex;gap:8px\"><button class=\"btn\" onclick=\"window.assignTo('${t.id}')\">Przypisz</button></div></div>`).join(''); }
+
+    window.assignTo = function(id){ const accs = loadAccounts(); const sel = prompt('Podaj ID realizatora do przypisania (lub "all")'); if(!sel) return; const tasks = loadTasks(); const t = tasks.find(x=>x.id===id); if(!t) return alert('Nie znaleziono'); t.assignedTo = sel; saveTasks(tasks); pushLog('task-assign', getSession(), sel, `Przypisano zadanie ${t.title}`); renderOpiekunTasks(); }
+
+    // inbox
+    function renderInbox(myId){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===myId); const container = document.getElementById('myInbox'); if(!container) return; container.innerHTML = (me.inbox && me.inbox.length>0) ? me.inbox.map((m,idx)=>`<div class=\"task-row\"><div><strong>${m.subject}</strong><div class=\"muted small\">Od: ${m.from} • ${m.time}</div><div style=\"margin-top:6px\">${m.body}</div></div><div style=\"display:flex;flex-direction:column;gap:6px\"><button class=\"btn\" onclick=\"window.markRead(${idx})\">Oznacz przeczytane</button></div></div>`).join('') : '<div class=\"muted\">Brak wiadomości.</div>';
+    }
+    window.markRead = function(idx){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===getSession()); if(!me || !me.inbox || !me.inbox[idx]) return; me.inbox[idx].read = true; saveAccounts(accs); renderInbox(getSession()); }
+
+    // logs viewer for admin/opiekun handled where inserted
+
+    // push periodic reminders
+    setInterval(()=>{
+      const tasks = loadTasks(); const now = new Date(); tasks.forEach(t=>{ if(t.reminder && !t.reminded){ const r = new Date(t.reminder); if(r <= now){ t.reminded = true; saveTasks(tasks); pushLog('reminder', 'system', t.assignedTo, `Przypomnienie: ${t.title}`); broadcast('notify',{title:'Przypomnienie', msg:`Zadanie: ${t.title}`}); } } });
+    }, 10000);
+
+    // snow effect reacting to scroll
+    const canvas = document.getElementById('snowCanvas'); const ctx = canvas.getContext('2d'); let W = innerWidth, H = innerHeight; canvas.width = W; canvas.height = H; let flakes = []; function initFlakes(n=120){ flakes = []; for(let i=0;i<n;i++){ flakes.push({x:Math.random()*W, y:Math.random()*H, r:1+Math.random()*3, speed:0.2+Math.random()*0.8, drift:Math.random()*1-0.5}); } }
+    initFlakes(140);
+    let speedMultiplier = 1; let lastScroll = window.scrollY, lastTime = Date.now(); window.addEventListener('scroll', ()=>{ const now = Date.now(); const dy = Math.abs(window.scrollY - lastScroll); const dt = Math.max(1, now - lastTime); const v = dy/dt; // px/ms
+      speedMultiplier = Math.min(6, 1 + v*30); lastScroll = window.scrollY; lastTime = now; setTimeout(()=>{ speedMultiplier = 1; }, 200);
+    });
+    function renderSnow(){ ctx.clearRect(0,0,W,H); for(let f of flakes){ f.y += f.speed * speedMultiplier; f.x += f.drift * speedMultiplier; if(f.y>H){ f.y = -10; f.x = Math.random()*W; } if(f.x>W) f.x = 0; if(f.x<0) f.x = W; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill(); } requestAnimationFrame(renderSnow); }
+    renderSnow(); window.addEventListener('resize', ()=>{ W=innerWidth; H=innerHeight; canvas.width=W; canvas.height=H; });
+
+    // init demo and start
+    await initDemo();
+    if(getSession()){ renderDashboard(); } else { renderAuth('login'); }
+
+    // listen for storage changes to detect cross-tab account updates
+    window.addEventListener('storage', (e)=>{ if(e.key === ACC_KEY){ if(getSession()) renderDashboard(); } });
+
+    // handle clicks from dynamic html that used inline onclick
+    window.approveAccount = approveAccount;
+
+    // small helper: if dashboard contains animated numbers, animate them
+    document.addEventListener('DOMContentLoaded', ()=>{ /* no-op */ });
+
+    // after rendering dashboard, animate numbers if present
+    const originalRenderDashboard = renderDashboard;
+    renderDashboard = function(){ originalRenderDashboard(); const el = document.getElementById('numPartners'); if(el){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===getSession()); const start = 0; const end = parseInt(me.partnerships||0,10); animateNumber(el, start, end, 900); } };
+
   })();
   </script>
 </body>

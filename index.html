@@ -157,6 +157,10 @@
 
   <script>
   (async function(){
+    // CONFIG: jeśli chcesz multi-device, uruchom serwer i ustaw USE_SERVER = true oraz SERVER_URL.
+    const USE_SERVER = false; // <- ustaw na true gdy uruchomisz serwer REST+SSE
+    const SERVER_URL = 'http://localhost:3001'; // adres twojego serwera
+
     // Keys for storage
     const ACC_KEY = 'rp_accounts_v2';
     const SESSION_KEY = 'rp_session_v2';
@@ -164,10 +168,10 @@
     const TASK_KEY = 'rp_tasks_v1';
     const LOG_KEY = 'rp_logs_v1';
 
-    // --- inter-tab realtime channel ---
+    // --- inter-tab realtime channel (local) ---
     const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('rp_channel') : null;
     function broadcast(type, payload){
-      try{ if(bc) bc.postMessage({type,payload}); else localStorage.setItem('rp_bc_tmp', JSON.stringify({t:Date.now(),type,payload})); }catch(e){/*noop*/}
+      try{ if(bc) bc.postMessage({type,payload}); else localStorage.setItem('rp_bc_tmp', JSON.stringify({t:Date.now(),type,payload})); }catch(e){/*noop*/} 
     }
     if(!bc){ window.addEventListener('storage', (e)=>{ if(e.key==='rp_bc_tmp' && e.newValue){ try{ const d=JSON.parse(e.newValue); handleBroadcast(d.type,d.payload); }catch{} }}); }
     if(bc) bc.onmessage = (m)=>{ handleBroadcast(m.data.type,m.data.payload); };
@@ -175,7 +179,6 @@
     function handleBroadcast(type,payload){
       if(type==='notify') showToast(payload.title, payload.msg);
       if(type==='account-updated') {
-        // if it's for current user, refresh dashboard
         if(getSession() && payload.id === getSession()){ renderDashboard(); showToast('Konto zaktualizowane','Twoje konto zostało zmienione przez administratora.'); }
       }
       if(type==='message'){
@@ -194,9 +197,49 @@
     // Secure compare
     function safeEqual(a,b){ if(!a||!b) return false; if(a.length !== b.length) return false; let res = 0; for(let i=0;i<a.length;i++) res |= a.charCodeAt(i) ^ b.charCodeAt(i); return res === 0; }
 
-    // --- storage helpers ---
-    function saveAccounts(accs){ localStorage.setItem(ACC_KEY, JSON.stringify(accs)); }
-    function loadAccounts(){ return JSON.parse(localStorage.getItem(ACC_KEY) || '[]'); }
+    // --- storage helpers (local fallback + optional server) ---
+    function saveAccountsLocal(accs){ localStorage.setItem(ACC_KEY, JSON.stringify(accs)); }
+    function loadAccountsLocal(){ return JSON.parse(localStorage.getItem(ACC_KEY) || '[]'); }
+
+    async function loadAccountsFromServer(){
+      try{
+        const res = await fetch(`${SERVER_URL}/api/accounts`);
+        if(!res.ok) return loadAccountsLocal();
+        const arr = await res.json();
+        saveAccountsLocal(arr);
+        return arr;
+      }catch(e){
+        return loadAccountsLocal();
+      }
+    }
+
+    async function createAccountOnServer(acc){
+      try{
+        const res = await fetch(`${SERVER_URL}/api/accounts`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(acc)
+        });
+        return res;
+      }catch(e){
+        throw e;
+      }
+    }
+
+    async function updateAccountOnServer(id, updates){
+      try{
+        const res = await fetch(`${SERVER_URL}/api/accounts/${encodeURIComponent(id)}`, {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(updates)
+        });
+        return res;
+      }catch(e){
+        throw e;
+      }
+    }
+
+    // other storage
     function setSession(id){ sessionStorage.setItem(SESSION_KEY, id); }
     function getSession(){ return sessionStorage.getItem(SESSION_KEY); }
     function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
@@ -236,16 +279,28 @@
     loadTheme();
 
     // --- init demo accounts (hash passwords) ---
-    async function initDemo(){ let accs = loadAccounts(); if(!accs || accs.length === 0){ accs = [];
+    async function initDemo(){ let accs = loadAccountsLocal(); if(!accs || accs.length === 0){ accs = [];
         accs.push({discordId:'1338922988753518723', passwordHash: await hashPassword('Domi'), role:'Administrator', partnerships:0, warnings:0, rate:0, status:'active', inbox:[]});
         accs.push({discordId:'500000000000000001', passwordHash: await hashPassword('Opiekun1'), role:'Opiekun Realizatorów', partnerships:0, warnings:0, rate:0, status:'active', inbox:[]});
-        saveAccounts(accs);
+        saveAccountsLocal(accs);
         pushLog('init-demo','system','all','Utworzono konta demo');
       } else {
         // migrate plain password if any
         let changed=false;
         for(let a of accs){ if(a.password && !a.passwordHash){ a.passwordHash = await hashPassword(a.password); delete a.password; changed=true; } if(!a.status) { a.status = 'active'; changed=true;} if(!a.inbox) a.inbox = []; }
-        if(changed) saveAccounts(accs);
+        if(changed) saveAccountsLocal(accs);
+      }
+      // If server mode, push local demo to server if empty there
+      if(USE_SERVER){
+        try{
+          const remote = await loadAccountsFromServer();
+          if(!remote || remote.length === 0){
+            // try to create demo accounts on server (best-effort)
+            for(const a of loadAccountsLocal()){
+              try{ await createAccountOnServer(a); }catch(e){ /* ignore */ }
+            }
+          }
+        }catch(e){}
       }
     }
 
@@ -323,18 +378,53 @@
       if(!sel){msg.textContent='Wybierz rolę.';return}
       const role = sel.dataset.role;
       if(role === 'Opiekun Realizatorów'){msg.textContent='Tę rolę może przydzielić tylko administrator.';return}
-      const accs = loadAccounts();
-      if(accs.find(a=>a.discordId===id)){msg.textContent='Konto o takim ID już istnieje.';return}
+
+      // check local first to give fast feedback
+      const localAccs = loadAccountsLocal();
+      if(localAccs.find(a=>a.discordId===id)){msg.textContent='Konto o takim ID już istnieje.';return}
+
       showLoader();
       const hashed = await hashPassword(pass);
-      // create pending account
       const newAcc = {discordId:id, passwordHash:hashed, role:role, partnerships:0, warnings:0, rate:0, status:'pending', inbox:[]};
-      accs.push(newAcc); saveAccounts(accs);
-      pushLog('register', id, id, `Rejestracja, status:pending`);
-      broadcast('notify',{title:'Nowa rejestracja', msg:`Konto ${id} oczekuje na zatwierdzenie przez admina.`});
-      hideLoader();
-      msg.textContent='Zarejestrowano. Konto oczekuje na zatwierdzenie przez administratora.';
-      setTimeout(()=>renderAuth('login'),900);
+
+      if(USE_SERVER && SERVER_URL){
+        try{
+          const res = await createAccountOnServer(newAcc);
+          if(res.status === 201){
+            // success -> sync
+            await loadAccountsFromServer();
+            pushLog('register', id, id, `Rejestracja (server), status:pending`);
+            broadcast('notify',{title:'Nowa rejestracja', msg:`Konto ${id} oczekuje na zatwierdzenie przez admina.`});
+            hideLoader();
+            msg.textContent='Zarejestrowano. Konto oczekuje na zatwierdzenie przez administratora.';
+            setTimeout(()=>renderAuth('login'),900);
+            return;
+          } else if(res.status === 409){
+            hideLoader(); msg.textContent='Konto o takim ID już istnieje (server).'; return;
+          } else {
+            hideLoader(); msg.textContent='Błąd serwera (status ' + res.status + ')'; return;
+          }
+        }catch(e){
+          // fallback: local
+          const accs2 = loadAccountsLocal();
+          accs2.push(newAcc); saveAccountsLocal(accs2);
+          pushLog('register', id, id, `Rejestracja (local fallback), status:pending`);
+          broadcast('notify',{title:'Nowa rejestracja (lokalna)', msg:`Konto ${id} oczekuje na zatwierdzenie.`});
+          hideLoader();
+          msg.textContent='Zarejestrowano lokalnie (serwer nieosiągalny). Konto oczekuje na zatwierdzenie na tym urządzeniu.';
+          setTimeout(()=>renderAuth('login'),900);
+          return;
+        }
+      } else {
+        // pure local flow
+        const accsLocal = loadAccountsLocal();
+        accsLocal.push(newAcc); saveAccountsLocal(accsLocal);
+        pushLog('register', id, id, `Rejestracja (local), status:pending`);
+        broadcast('notify',{title:'Nowa rejestracja', msg:`Konto ${id} oczekuje na zatwierdzenie przez administratora.`});
+        hideLoader();
+        msg.textContent='Zarejestrowano. Konto oczekuje na zatwierdzenie przez administratora.';
+        setTimeout(()=>renderAuth('login'),900);
+      }
     }
 
     async function doLogin(){
@@ -342,7 +432,14 @@
       const pass = document.getElementById('loginPass').value;
       const msg = document.getElementById('authMsg');
       if(!id || !pass){msg.textContent='Wypełnij wszystkie pola.';return}
-      const accs = loadAccounts();
+
+      // choose source
+      let accs = loadAccountsLocal();
+      if(USE_SERVER && SERVER_URL){
+        showLoader();
+        accs = await loadAccountsFromServer();
+        hideLoader();
+      }
       const acc = accs.find(a=>a.discordId===id);
       if(!acc){msg.textContent='Błędne ID lub hasło.';return}
       showLoader();
@@ -358,10 +455,15 @@
     }
 
     // Dashboard views
-    function renderDashboard(){
+    async function renderDashboard(){
       const id = getSession();
       if(!id){ renderAuth('login'); return }
-      const accs = loadAccounts();
+      let accs = loadAccountsLocal();
+      if(USE_SERVER && SERVER_URL){
+        showLoader();
+        accs = await loadAccountsFromServer();
+        hideLoader();
+      }
       const me = accs.find(a=>a.discordId===id);
       if(!me){ clearSession(); renderAuth('login'); return }
 
@@ -370,9 +472,9 @@
       html += `<div style=\"display:flex;gap:10px;align-items:center\"><button class=\"btn ghost\" id=\"doLogout\">Wyloguj</button></div></div><hr style=\"margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)\">`;
 
       if(me.role === 'Administrator'){
-        html += adminPanelHTML(loadAccounts(), me.discordId);
+        html += adminPanelHTML(accs, me.discordId);
       } else if(me.role === 'Opiekun Realizatorów'){
-        html += opiekunPanelHTML(loadAccounts());
+        html += opiekunPanelHTML(accs);
       } else {
         html += realizatorPanelHTML(me);
       }
@@ -384,7 +486,6 @@
       if(me.role==='Opiekun Realizatorów') attachOpiekunHandlers();
       if(me.role.startsWith('Realizator')) attachRealizatorHandlers(me.discordId);
 
-      // if have unread messages, show small toast
       const unread = me.inbox ? me.inbox.filter(m=>!m.read).length : 0;
       if(unread>0) showToast('Nowe wiadomości', `Masz ${unread} nieprzeczytanych wiadomości.`);
     }
@@ -454,7 +555,32 @@
     // Admin handlers
     function attachAdminHandlers(){
       document.querySelectorAll('.edit-user').forEach(btn=>{ btn.onclick = (e)=>{ const idx = btn.dataset.idx || btn.closest('.user-row').dataset.idx; openAdminEdit(parseInt(idx,10)); } });
-      document.getElementById('adminAdd').onclick = async ()=>{ const id = document.getElementById('adminNewId').value.trim(); const pass = document.getElementById('adminNewPass').value; const role = document.getElementById('adminNewRole').value; if(!id||!pass){alert('Wypełnij ID i hasło');return} const accs = loadAccounts(); if(accs.find(a=>a.discordId===id)){alert('Istnieje konto o takim ID');return} showLoader(); const hashed = await hashPassword(pass); accs.push({discordId:id,passwordHash:hashed,role:role,partnerships:0,warnings:0,rate:0,status:'active',inbox:[]}); saveAccounts(accs); pushLog('admin-add', getSession(), id, `Dodano konto ręcznie przez admina`); broadcast('notify',{title:'Nowe konto', msg:`Konto ${id} utworzone przez admina.`}); hideLoader(); renderDashboard(); };
+      document.getElementById('adminAdd').onclick = async ()=>{ const id = document.getElementById('adminNewId').value.trim(); const pass = document.getElementById('adminNewPass').value; const role = document.getElementById('adminNewRole').value; if(!id||!pass){alert('Wypełnij ID i hasło');return} const accs = loadAccountsLocal(); if(accs.find(a=>a.discordId===id)){alert('Istnieje konto o takim ID');return} showLoader(); const hashed = await hashPassword(pass);
+        const newAcc = {discordId:id,passwordHash:hashed,role:role,partnerships:0,warnings:0,rate:0,status:'active',inbox:[]};
+        if(USE_SERVER && SERVER_URL){
+          try{
+            const res = await createAccountOnServer(newAcc);
+            if(res.status === 201){
+              await loadAccountsFromServer();
+              pushLog('admin-add', getSession(), id, `Dodano konto przez admina (server)`);
+              broadcast('notify',{title:'Nowe konto', msg:`Konto ${id} utworzone przez admina.`});
+              hideLoader();
+              renderDashboard();
+              return;
+            } else {
+              hideLoader();
+              alert('Błąd serwera podczas tworzenia konta.');
+              return;
+            }
+          }catch(e){
+            // fallback local
+            const accs2 = loadAccountsLocal(); accs2.push(newAcc); saveAccountsLocal(accs2); pushLog('admin-add', getSession(), id, `Dodano konto przez admina (local fallback)`); broadcast('notify',{title:'Nowe konto (lokalne)', msg:`Konto ${id} utworzone`}); hideLoader(); renderDashboard(); return;
+          }
+        } else {
+          accs.push(newAcc); saveAccountsLocal(accs); pushLog('admin-add', getSession(), id, `Dodano konto ręcznie przez admina`); broadcast('notify',{title:'Nowe konto', msg:`Konto ${id} utworzone przez admina.`}); hideLoader(); renderDashboard();
+        }
+      };
+
       document.getElementById('adminRefresh').onclick = ()=>renderDashboard();
 
       // approve buttons
@@ -463,48 +589,126 @@
       document.querySelectorAll('.send-msg').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.id; openSendMessage(id); } });
 
       // render logs
-      const logs = loadLogs(); const lcontainer = document.getElementById('adminLogs'); lcontainer.innerHTML = logs.map(l=>`<div class=\"log\"><div style=\"font-weight:700\">${l.action}</div><div style=\"font-size:13px\">${l.time} • actor: ${l.actor} • target: ${l.target}</div><div style=\"margin-top:6px;font-size:13px;color:var(--muted)\">${l.details}</div></div>`).join('');
+      const logs = loadLogs(); const lcontainer = document.getElementById('adminLogs'); if(lcontainer) lcontainer.innerHTML = logs.map(l=>`<div class=\"log\"><div style=\"font-weight:700\">${l.action}</div><div style=\"font-size:13px\">${l.time} • actor: ${l.actor} • target: ${l.target}</div><div style=\"margin-top:6px;font-size:13px;color:var(--muted)\">${l.details}</div></div>`).join('');
     }
 
-    async function openAdminEdit(idx){ const accs = loadAccounts(); const a = accs[idx]; if(!a) return; const editor = document.getElementById('adminEditor'); editor.innerHTML = `<h4>Edytuj konto ${a.discordId}</h4>`; editor.innerHTML += `<label>ID Discord</label><input id=\"editId\" value=\"${a.discordId}\">`; editor.innerHTML += `<label>Hasło (wpisz nowe lub pozostaw)</label><input id=\"editPass\">`; editor.innerHTML += `<label>Rola</label><select id=\"editRole\"><option ${a.role==='Realizator Partnerstw'?'selected':''}>Realizator Partnerstw</option><option ${a.role==='Weekendowy Realizator Partnerstw'?'selected':''}>Weekendowy Realizator Partnerstw</option><option ${a.role==='Opiekun Realizatorów'?'selected':''}>Opiekun Realizatorów</option><option ${a.role==='Administrator'?'selected':''}>Administrator</option></select>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"editPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"editWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"editRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<label>Status</label><select id=\"editStatus\"><option ${a.status==='active'?'selected':''}>active</option><option ${a.status==='pending'?'selected':''}>pending</option><option ${a.status==='suspended'?'selected':''}>suspended</option></select>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"saveEdit\">Zapisz</button><button class=\"btn ghost\" id=\"cancelEdit\">Anuluj</button></div>`;
+    async function openAdminEdit(idx){ const accs = USE_SERVER ? await loadAccountsFromServer() : loadAccountsLocal(); const a = accs[idx]; if(!a) return; const editor = document.getElementById('adminEditor'); if(!editor){ alert('Brak miejsca edycji (brak elementu adminEditor)'); return; } editor.innerHTML = `<h4>Edytuj konto ${a.discordId}</h4>`; editor.innerHTML += `<label>ID Discord</label><input id=\"editId\" value=\"${a.discordId}\">`; editor.innerHTML += `<label>Hasło (wpisz nowe lub pozostaw)</label><input id=\"editPass\">`; editor.innerHTML += `<label>Rola</label><select id=\"editRole\"><option ${a.role==='Realizator Partnerstw'?'selected':''}>Realizator Partnerstw</option><option ${a.role==='Weekendowy Realizator Partnerstw'?'selected':''}>Weekendowy Realizator Partnerstw</option><option ${a.role==='Opiekun Realizatorów'?'selected':''}>Opiekun Realizatorów</option><option ${a.role==='Administrator'?'selected':''}>Administrator</option></select>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"editPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"editWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"editRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<label>Status</label><select id=\"editStatus\"><option ${a.status==='active'?'selected':''}>active</option><option ${a.status==='pending'?'selected':''}>pending</option><option ${a.status==='suspended'?'selected':''}>suspended</option></select>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"saveEdit\">Zapisz</button><button class=\"btn ghost\" id=\"cancelEdit\">Anuluj</button></div>`;
 
       document.getElementById('cancelEdit').onclick = () => { editor.innerHTML=''; };
       document.getElementById('saveEdit').onclick = async () => {
         const newId = document.getElementById('editId').value.trim(); const newPass = document.getElementById('editPass').value; const newRole = document.getElementById('editRole').value; const newPartners = parseInt(document.getElementById('editPartners').value||0,10); const newWarns = parseInt(document.getElementById('editWarns').value||0,10); const newRate = document.getElementById('editRate').value; const newStatus = document.getElementById('editStatus').value;
         if(!newId){ alert('ID nie może być puste'); return }
-        const accs2 = loadAccounts(); const conflict = accs2.find((x,i)=>x.discordId===newId && i!==idx); if(conflict){ alert('ID zajęte przez inne konto'); return }
-        accs2[idx].discordId = newId; if(newPass && newPass.length>0){ accs2[idx].passwordHash = await hashPassword(newPass); }
-        accs2[idx].role = newRole; accs2[idx].partnerships = newPartners; accs2[idx].warnings = newWarns; accs2[idx].rate = newRate; accs2[idx].status = newStatus; saveAccounts(accs2);
-        pushLog('admin-edit', getSession(), newId, `Edycja konta przez admina`);
-        broadcast('account-updated',{id:newId}); editor.innerHTML=''; renderDashboard();
+        // load current list
+        let accs2 = USE_SERVER ? await loadAccountsFromServer() : loadAccountsLocal();
+        const conflict = accs2.find((x,i)=>x.discordId===newId && i!==idx);
+        if(conflict){ alert('ID zajęte przez inne konto'); return }
+        // apply changes
+        if(newPass && newPass.length>0){
+          accs2[idx].passwordHash = await hashPassword(newPass);
+        }
+        accs2[idx].discordId = newId;
+        accs2[idx].role = newRole; accs2[idx].partnerships = newPartners; accs2[idx].warnings = newWarns; accs2[idx].rate = newRate; accs2[idx].status = newStatus;
+        if(USE_SERVER && SERVER_URL){
+          try{
+            await updateAccountOnServer(newId, accs2[idx]);
+            pushLog('admin-edit', getSession(), newId, `Edycja konta przez admina (server)`);
+            // server SSE will notify clients; sync local
+            await loadAccountsFromServer();
+            editor.innerHTML=''; renderDashboard();
+            return;
+          }catch(e){
+            alert('Błąd komunikacji z serwerem podczas zapisu. Spróbuj ponownie.');
+            return;
+          }
+        } else {
+          saveAccountsLocal(accs2);
+          pushLog('admin-edit', getSession(), newId, `Edycja konta przez admina (local)`);
+          editor.innerHTML=''; renderDashboard();
+        }
       };
     }
 
     // global delete
-    window.deleteUser = function(i){ if(!confirm('Usunąć to konto?')) return; const accs = loadAccounts(); const id = accs[i].discordId; accs.splice(i,1); saveAccounts(accs); pushLog('admin-delete', getSession(), id, `Usunięto konto`); if(getSession()===id) { clearSession(); renderAuth('login'); return; } renderDashboard(); }
+    window.deleteUser = async function(i){ if(!confirm('Usunąć to konto?')) return; let accs = loadAccountsLocal(); const id = accs[i].discordId;
+      if(USE_SERVER && SERVER_URL){
+        try{
+          // naive delete: fetch all, remove, then PUT full list not implemented server-side; easiest: set status 'deleted' locally instead
+          accs = await loadAccountsFromServer();
+          if(!accs[i]) return alert('Nie znaleziono');
+          accs.splice(i,1);
+          // persist by replacing accounts.json is not implemented; simplest approach: update server per-account not delete; show message
+          alert('Usuwanie zdalne niezaimplementowane na serwerze prostym. Ustawiono usunięcie lokalnie.');
+          saveAccountsLocal(accs);
+          pushLog('admin-delete', getSession(), id, `Usunięto konto (local)`); 
+          if(getSession()===id) { clearSession(); renderAuth('login'); return; }
+          renderDashboard();
+          return;
+        }catch(e){
+          alert('Nie można połączyć z serwerem — usunięto lokalnie.');
+        }
+      } else {
+        accs.splice(i,1); saveAccountsLocal(accs); pushLog('admin-delete', getSession(), id, `Usunięto konto`); if(getSession()===id) { clearSession(); renderAuth('login'); return; } renderDashboard();
+      }
+    }
 
     // suspend/activate helpers
-    window.suspendUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'suspended'; saveAccounts(accs); pushLog('suspend', getSession(), id, 'Zawieszono konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zawieszone', msg:`Twoje konto ${id} zostało zawieszone.`}); renderDashboard(); }
-    window.activateUser = function(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('activate', getSession(), id, 'Aktywовано konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto aktywne', msg:`Twoje konto ${id} zostało aktywowane przez administratora.`}); renderDashboard(); }
+    window.suspendUser = async function(id){ 
+      if(USE_SERVER && SERVER_URL){
+        try{
+          await updateAccountOnServer(id, { status:'suspended' });
+          pushLog('suspend', getSession(), id, 'Zawieszono konto (server)');
+          // server SSE will notify; sync
+          await loadAccountsFromServer(); renderDashboard(); return;
+        }catch(e){
+          alert('Błąd podczas zawieszania na serwerze. Wykonano lokalnie.');
+        }
+      }
+      const accs = loadAccountsLocal(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'suspended'; saveAccountsLocal(accs); pushLog('suspend', getSession(), id, 'Zawieszono konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zawieszone', msg:`Twoje konto ${id} zostało zawieszone.`}); renderDashboard(); 
+    }
+    window.activateUser = async function(id){ 
+      if(USE_SERVER && SERVER_URL){
+        try{
+          await updateAccountOnServer(id, { status:'active' });
+          pushLog('activate', getSession(), id, 'Aktywowane konto (server)');
+          await loadAccountsFromServer(); renderDashboard(); return;
+        }catch(e){
+          alert('Błąd podczas aktywacji na serwerze. Wykonano lokalnie.');
+        }
+      }
+      const accs = loadAccountsLocal(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccountsLocal(accs); pushLog('activate', getSession(), id, 'Aktywовано konto'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto aktywne', msg:`Twoje konto ${id} zostało aktywowane przez administratora.`}); renderDashboard(); 
+    }
 
-    function approveAccount(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccounts(accs); pushLog('approve', getSession(), id, 'Zatwierdzono rejestrację'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zatwierdzone', msg:`Twoje konto ${id} zostało zatwierdzone.`}); renderDashboard(); }
+    async function approveAccount(id){ 
+      if(USE_SERVER && SERVER_URL){
+        try{
+          await updateAccountOnServer(id, { status:'active' });
+          pushLog('approve', getSession(), id, 'Zatwierdzono rejestrację (server)');
+          await loadAccountsFromServer(); renderDashboard(); return;
+        }catch(e){
+          alert('Błąd komunikacji z serwerem. Spróbuj ponownie.');
+          return;
+        }
+      } else {
+        const accs = loadAccountsLocal(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono'); a.status = 'active'; saveAccountsLocal(accs); pushLog('approve', getSession(), id, 'Zatwierdzono rejestrację'); broadcast('account-updated',{id}); broadcast('notify',{title:'Konto zatwierdzone', msg:`Twoje konto ${id} zostało zatwierdzone.`}); renderDashboard();
+      }
+    }
 
     // send internal message
-    function openSendMessage(to){ const editor = document.getElementById('adminEditor'); editor.innerHTML = `<h4>Wyślij wewnętrzną wiadomość do ${to}</h4>`; editor.innerHTML += `<label>Temat</label><input id=\"msgSub\">`; editor.innerHTML += `<label>Treść</label><textarea id=\"msgBody\"></textarea>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"sendMsgBtn\">Wyślij</button><button class=\"btn ghost\" id=\"msgCancel\">Anuluj</button></div>`;
+    function openSendMessage(to){ const editor = document.getElementById('adminEditor'); if(!editor){ alert('Brak panelu do wysyłania wiadomości'); return; } editor.innerHTML = `<h4>Wyślij wewnętrzną wiadomość do ${to}</h4>`; editor.innerHTML += `<label>Temat</label><input id=\"msgSub\">`; editor.innerHTML += `<label>Treść</label><textarea id=\"msgBody\"></textarea>`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"sendMsgBtn\">Wyślij</button><button class=\"btn ghost\" id=\"msgCancel\">Anuluj</button></div>`;
       document.getElementById('msgCancel').onclick = ()=>{ editor.innerHTML=''; };
-      document.getElementById('sendMsgBtn').onclick = ()=>{
+      document.getElementById('sendMsgBtn').onclick = async ()=>{
         const sub = document.getElementById('msgSub').value.trim(); const body = document.getElementById('msgBody').value.trim(); if(!sub||!body){ alert('Wypełnij temat i treść'); return }
-        const accs = loadAccounts(); const r = accs.find(x=>x.discordId===to); if(!r) return alert('Konto nie istnieje'); r.inbox = r.inbox || []; r.inbox.unshift({from:getSession(), subject:sub, body:body, time:new Date().toISOString(), read:false}); saveAccounts(accs); pushLog('message', getSession(), to, `Wysłano wiadomość: ${sub}`); broadcast('message',{to, subject:sub}); showToast('Wysłano wiadomość', `Do: ${to}`); editor.innerHTML=''; renderDashboard(); };
+        const accs = loadAccountsLocal(); const r = accs.find(x=>x.discordId===to); if(!r) return alert('Konto nie istnieje'); r.inbox = r.inbox || []; r.inbox.unshift({from:getSession(), subject:sub, body:body, time:new Date().toISOString(), read:false}); saveAccountsLocal(accs); pushLog('message', getSession(), to, `Wysłano wiadomość: ${sub}`); broadcast('message',{to, subject:sub}); showToast('Wysłano wiadomość', `Do: ${to}`); editor.innerHTML=''; renderDashboard();
+      };
     }
 
     // opiekun handlers
     function attachOpiekunHandlers(){ document.querySelectorAll('.edit-real').forEach(b=>{ b.onclick = ()=>{ const id = b.dataset.id; openOpiekunEdit(id); } });
-      // show tasks
       renderOpiekunTasks(); const logs = loadLogs(); const lc = document.getElementById('opiekunLogs'); if(lc) lc.innerHTML = logs.slice(0,50).map(l=>`<div class=\"log\">${l.time} • ${l.action} • ${l.actor} → ${l.target}<div style=\"font-size:13px;color:var(--muted)\">${l.details}</div></div>`).join(''); }
 
-    function openOpiekunEdit(id){ const accs = loadAccounts(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono konta'); const editor = document.getElementById('opiekunEditor'); editor.innerHTML = `<h4>Edytuj panel realizatora ${a.discordId}</h4>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"oPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"oWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"oRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"oSave\">Zapisz</button><button class=\"btn ghost\" id=\"oCancel\">Anuluj</button></div>`;
+    function openOpiekunEdit(id){ const accs = loadAccountsLocal(); const a = accs.find(x=>x.discordId===id); if(!a) return alert('Nie znaleziono konta'); const editor = document.getElementById('opiekunEditor'); if(!editor) return; editor.innerHTML = `<h4>Edytuj panel realizatora ${a.discordId}</h4>`; editor.innerHTML += `<label>Partnerstw</label><input id=\"oPartners\" type=\"number\" class=\"mini\" value=\"${a.partnerships}\">`; editor.innerHTML += `<label>Ostrzeżeń</label><input id=\"oWarns\" type=\"number\" class=\"mini\" value=\"${a.warnings}\">`; editor.innerHTML += `<label>Stawka</label><input id=\"oRate\" class=\"mini\" value=\"${a.rate}\">`; editor.innerHTML += `<div style=\"display:flex;gap:8px;margin-top:8px\"><button class=\"btn primary\" id=\"oSave\">Zapisz</button><button class=\"btn ghost\" id=\"oCancel\">Anuluj</button></div>`;
       document.getElementById('oCancel').onclick = ()=>{editor.innerHTML='';};
-      document.getElementById('oSave').onclick = ()=>{ const partners = parseInt(document.getElementById('oPartners').value||0,10); const warns = parseInt(document.getElementById('oWarns').value||0,10); const rate = document.getElementById('oRate').value; const accs2 = loadAccounts(); const a2 = accs2.find(x=>x.discordId===id); if(!a2) return alert('Błąd: konto zniknęło'); a2.partnerships = partners; a2.warnings = warns; a2.rate = rate; saveAccounts(accs2); pushLog('opiekun-edit', getSession(), id, 'Opiekun zaktualizował panel'); broadcast('account-updated',{id}); editor.innerHTML=''; renderDashboard(); };
+      document.getElementById('oSave').onclick = ()=>{ const partners = parseInt(document.getElementById('oPartners').value||0,10); const warns = parseInt(document.getElementById('oWarns').value||0,10); const rate = document.getElementById('oRate').value; const accs2 = loadAccountsLocal(); const a2 = accs2.find(x=>x.discordId===id); if(!a2) return alert('Błąd: konto zniknęło'); a2.partnerships = partners; a2.warnings = warns; a2.rate = rate; saveAccountsLocal(accs2); pushLog('opiekun-edit', getSession(), id, 'Opiekun zaktualizował panel'); broadcast('account-updated',{id}); editor.innerHTML=''; renderDashboard(); };
     }
 
     function attachRealizatorHandlers(myId){ // nothing heavy here — tasks and inbox handled elsewhere
@@ -515,7 +719,7 @@
     function animateNumber(el, start, end, duration=900){ const startTime = performance.now(); function tick(now){ const t = Math.min(1,(now-startTime)/duration); const val = Math.floor(start + (end-start)*t); el.textContent = val; if(t<1) requestAnimationFrame(tick); } requestAnimationFrame(tick); }
 
     // calendar & tasks
-    function renderMyCalendar(myId){ const container = document.getElementById('myCalendar'); const tasks = loadTasks().filter(t=>t.assignedTo===myId || t.assignedTo==='all'); container.innerHTML = `<div class=\"calendar\"><div style=\"display:flex;gap:8px\"><input type=\"date\" id=\"taskDate\"> <input id=\"taskTitle\" placeholder=\"Nowe zadanie\"> <button class=\"btn primary\" id=\"addTaskBtn\">Dodaj</button></div><div id=\"taskList\" style=\"margin-top:8px\"></div></div>`;
+    function renderMyCalendar(myId){ const container = document.getElementById('myCalendar'); const tasks = loadTasks().filter(t=>t.assignedTo===myId || t.assignedTo==='all'); if(!container) return; container.innerHTML = `<div class=\"calendar\"><div style=\"display:flex;gap:8px\"><input type=\"date\" id=\"taskDate\"> <input id=\"taskTitle\" placeholder=\"Nowe zadanie\"> <button class=\"btn primary\" id=\"addTaskBtn\">Dodaj</button></div><div id=\"taskList\" style=\"margin-top:8px\"></div></div>`;
       document.getElementById('addTaskBtn').onclick = ()=>{ const date = document.getElementById('taskDate').value; const title = document.getElementById('taskTitle').value.trim(); if(!date||!title){ alert('Uzupełnij date i tytuł'); return } const tasksAll = loadTasks(); const id = 't'+Date.now(); tasksAll.push({id,title,date,assignedTo:myId,createdBy:getSession(),done:false,reminder:null}); saveTasks(tasksAll); pushLog('task-add', getSession(), myId, `Dodano zadanie: ${title}`); renderMyCalendar(myId); }
       renderTaskList(tasks, 'taskList'); }
 
@@ -526,12 +730,12 @@
 
     function renderOpiekunTasks(){ const container = document.getElementById('opiekunTasks'); const tasks = loadTasks(); if(!container) return; container.innerHTML = tasks.map(t=>`<div class=\"task-row\"><div><strong>${t.title}</strong><div class=\"muted small\">${t.date} • ${t.assignedTo}</div></div><div style=\"display:flex;gap:8px\"><button class=\"btn\" onclick=\"window.assignTo('${t.id}')\">Przypisz</button></div></div>`).join(''); }
 
-    window.assignTo = function(id){ const accs = loadAccounts(); const sel = prompt('Podaj ID realizatora do przypisania (lub "all")'); if(!sel) return; const tasks = loadTasks(); const t = tasks.find(x=>x.id===id); if(!t) return alert('Nie znaleziono'); t.assignedTo = sel; saveTasks(tasks); pushLog('task-assign', getSession(), sel, `Przypisano zadanie ${t.title}`); renderOpiekunTasks(); }
+    window.assignTo = function(id){ const accs = loadAccountsLocal(); const sel = prompt('Podaj ID realizatora do przypisania (lub "all")'); if(!sel) return; const tasks = loadTasks(); const t = tasks.find(x=>x.id===id); if(!t) return alert('Nie znaleziono'); t.assignedTo = sel; saveTasks(tasks); pushLog('task-assign', getSession(), sel, `Przypisano zadanie ${t.title}`); renderOpiekunTasks(); }
 
     // inbox
-    function renderInbox(myId){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===myId); const container = document.getElementById('myInbox'); if(!container) return; container.innerHTML = (me.inbox && me.inbox.length>0) ? me.inbox.map((m,idx)=>`<div class=\"task-row\"><div><strong>${m.subject}</strong><div class=\"muted small\">Od: ${m.from} • ${m.time}</div><div style=\"margin-top:6px\">${m.body}</div></div><div style=\"display:flex;flex-direction:column;gap:6px\"><button class=\"btn\" onclick=\"window.markRead(${idx})\">Oznacz przeczytane</button></div></div>`).join('') : '<div class=\"muted\">Brak wiadomości.</div>';
+    function renderInbox(myId){ const accs = loadAccountsLocal(); const me = accs.find(a=>a.discordId===myId); const container = document.getElementById('myInbox'); if(!container) return; container.innerHTML = (me.inbox && me.inbox.length>0) ? me.inbox.map((m,idx)=>`<div class=\"task-row\"><div><strong>${m.subject}</strong><div class=\"muted small\">Od: ${m.from} • ${m.time}</div><div style=\"margin-top:6px\">${m.body}</div></div><div style=\"display:flex;flex-direction:column;gap:6px\"><button class=\"btn\" onclick=\"window.markRead(${idx})\">Oznacz przeczytane</button></div></div>`).join('') : '<div class=\"muted\">Brak wiadomości.</div>';
     }
-    window.markRead = function(idx){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===getSession()); if(!me || !me.inbox || !me.inbox[idx]) return; me.inbox[idx].read = true; saveAccounts(accs); renderInbox(getSession()); }
+    window.markRead = function(idx){ const accs = loadAccountsLocal(); const me = accs.find(a=>a.discordId===getSession()); if(!me || !me.inbox || !me.inbox[idx]) return; me.inbox[idx].read = true; saveAccountsLocal(accs); renderInbox(getSession()); }
 
     // logs viewer for admin/opiekun handled where inserted
 
@@ -551,9 +755,28 @@
 
     // init demo and start
     await initDemo();
-    if(getSession()){ renderDashboard(); } else { renderAuth('login'); }
+    if(getSession()){ await renderDashboard(); } else { renderAuth('login'); }
 
-    // listen for storage changes to detect cross-tab account updates
+    // Realtime from server via SSE (if USE_SERVER)
+    if(USE_SERVER && SERVER_URL){
+      try{
+        const es = new EventSource(`${SERVER_URL}/api/events`);
+        es.onmessage = function(e){
+          try{
+            const d = JSON.parse(e.data);
+            if(d.type === 'account-created' || d.type === 'account-updated'){
+              loadAccountsFromServer().then(()=>{
+                if(getSession()) renderDashboard();
+              });
+              showToast('Aktualizacja kont', `Zaktualizowano konto: ${d.account.discordId}`);
+            }
+          }catch(err){}
+        };
+        es.onerror = function(){ console.warn('EventSource error'); es.close(); };
+      }catch(e){}
+    }
+
+    // listen for storage changes to detect cross-tab account updates (local)
     window.addEventListener('storage', (e)=>{ if(e.key === ACC_KEY){ if(getSession()) renderDashboard(); } });
 
     // handle clicks from dynamic html that used inline onclick
@@ -564,7 +787,7 @@
 
     // after rendering dashboard, animate numbers if present
     const originalRenderDashboard = renderDashboard;
-    renderDashboard = function(){ originalRenderDashboard(); const el = document.getElementById('numPartners'); if(el){ const accs = loadAccounts(); const me = accs.find(a=>a.discordId===getSession()); const start = 0; const end = parseInt(me.partnerships||0,10); animateNumber(el, start, end, 900); } };
+    renderDashboard = async function(){ await originalRenderDashboard(); const el = document.getElementById('numPartners'); if(el){ const accs = loadAccountsLocal(); const me = accs.find(a=>a.discordId===getSession()); const start = 0; const end = parseInt(me.partnerships||0,10); animateNumber(el, start, end, 900); } };
 
   })();
   </script>

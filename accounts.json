@@ -1,0 +1,13 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "discordId": "1338922988753518723",
+    "passwordHash": "$2a$10$EXAMPLEHASH...",
+    "role": "Administrator",
+    "partnerships": 0,
+    "warnings": 0,
+    "rate": 0,
+    "status": "active",
+    "inbox": []
+  }
+]
